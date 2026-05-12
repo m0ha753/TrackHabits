@@ -176,7 +176,7 @@ function SwipeCard({hab,pct,onPct,onEdit,t,showEvening}){
           <div style={{fontWeight:700,fontSize:15,color:pct===100?hab.color:t.text,fontFamily:t.font,transition:"color .3s",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{hab.name}</div>
           <div style={{fontSize:12,color:t.sub,marginTop:3,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             {s>0&&<span style={{color:hab.color,fontWeight:600}}>🔥 {s}j</span>}
-            {prog?<span style={{color:pct>0?hab.color:t.sub}}>{prog}</span>:pct===100?<span style={{color:hab.color}}>✓ Terminé !</span>:pct>0?<span style={{color:hab.color}}>{pct}%</span>:showEvening&&pct===0?<span style={{color:"#fb923c"}}>⏰ À faire ce soir</span>:<span>← Glisse pour avancer</span>}
+            {prog?<span style={{color:pct>0?hab.color:t.sub}}>{prog}</span>:pct===100?<span style={{color:hab.color}}>✓ Terminé !</span>:pct>0?<span style={{color:hab.color}}>{pct}%</span>:<span>← Glisse pour avancer</span>}
           </div>
         </div>
         <div style={{pointerEvents:"all"}} onPointerDown={e=>e.stopPropagation()}>
