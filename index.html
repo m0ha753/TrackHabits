@@ -47,31 +47,45 @@ const UNITS=["L","ml","h","min","km","m","fois","pages","kcal","€",""];
 const DAYS_FR=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
 const MONTHS_FULL=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 
+const BADGES=[
+  {id:"first",emoji:"🌱",label:"Première",desc:"Créer ta 1ère habitude",check:(h)=>h.length>=1},
+  {id:"w7",emoji:"🔥",label:"Semaine feu",desc:"7j consécutifs",check:(h,l)=>h.some(x=>streak(x,l)>=7)},
+  {id:"m30",emoji:"💎",label:"Diamant",desc:"30j consécutifs",check:(h,l)=>h.some(x=>streak(x,l)>=30)},
+  {id:"perf",emoji:"⭐",label:"Parfait",desc:"Semaine 100%",check:(h,l)=>checkPerfect(h,l)},
+  {id:"mood30",emoji:"🧘",label:"Équilibre",desc:"30 humeurs enregistrées",check:(_,__,m)=>Object.keys(m).length>=30},
+  {id:"all5",emoji:"🏆",label:"Champion",desc:"5 habitudes actives",check:(h)=>h.length>=5},
+];
+
 const today=()=>new Date().toISOString().split("T")[0];
+const dow=d=>(new Date(d+"T12:00:00").getDay()+6)%7;
 const shift=(d,n)=>{const x=new Date(d+"T12:00:00");x.setDate(x.getDate()+n);return x.toISOString().split("T")[0];};
-const scheduled=(h,d)=>h.frequency==="daily"?true:true;
+const lastN=n=>Array.from({length:n},(_,i)=>shift(today(),-(n-1-i)));
+const scheduled=(h,d)=>h.frequency==="daily"?true:h.frequency==="weekly"?(h.days||[]).includes(dow(d)):true;
 const scoreColor=p=>p>=80?"#4ade80":p>=45?"#facc15":"#f87171";
 
 function streak(hab,logs){
   let s=0;
-  for(let i=0;i<365;i++){const d=shift(today(),-i);if((logs[d]?.[hab.id]||0)>=100)s++;else break;}
+  for(let i=0;i<365;i++){const d=shift(today(),-i);if(!scheduled(hab,d))continue;if((logs[d]?.[hab.id]||0)>=100)s++;else break;}
   return s;
 }
+function checkPerfect(habits,logs){
+  return lastN(7).every(d=>{const sc=habits.filter(h=>scheduled(h,d));return sc.length>0&&sc.every(h=>(logs[d]?.[h.id]||0)>=100);});
+}
+const dayScore=(habits,logs,d)=>{const sc=habits.filter(h=>scheduled(h,d));if(!sc.length)return null;return Math.round(sc.reduce((a,h)=>a+(logs[d]?.[h.id]||0),0)/sc.length);};
 
 const fmtProgress=(hab,pct)=>{
   if(!hab.goalQty) return null;
   const cur = (pct/100) * hab.goalQty;
-  // Si unité "fois", on affiche sans décimales
   const displayCur = hab.goalUnit === "fois" ? Math.round(cur) : Math.round(cur * 10) / 10;
   return `${displayCur}${hab.goalUnit} / ${hab.goalQty}${hab.goalUnit}`;
 };
 
 function Ring({pct=0,color,size=48,stroke=4,t}){
-  const r=(size-stroke*2)/2,c=2*Math.PI*r;
+  const tc=t||THEMES.nebula,r=(size-stroke*2)/2,c=2*Math.PI*r;
   return(
     <div style={{position:"relative",width:size,height:size,flexShrink:0}}>
       <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={t.muted} strokeWidth={stroke}/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={tc.muted} strokeWidth={stroke}/>
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeDasharray={`${(pct/100)*c} ${c}`} strokeLinecap="round" style={{transition:"stroke-dasharray .4s ease"}}/>
       </svg>
       <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -85,7 +99,7 @@ function Modal({visible,onClose,t,children}){
   if(!visible)return null;
   return(
     <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"#00000099",zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-      <div style={{background:t.card,borderRadius:"24px 24px 0 0",padding:"22px 20px 48px",width:"100%",maxWidth:520,maxHeight:"92vh",overflowY:"auto",borderTop:`1px solid ${t.border}`,color:t.text}}>
+      <div style={{background:t.card,borderRadius:"24px 24px 0 0",padding:"22px 20px 48px",width:"100%",maxWidth:520,maxHeight:"92vh",overflowY:"auto",borderTop:`1px solid ${t.border}`,color:t.text,fontFamily:t.ui}}>
         {children}
       </div>
     </div>
@@ -101,7 +115,7 @@ function SwipeCard({hab,pct,onPct,onEdit,t}){
   const ref=useRef();
   const dragging=useRef(false);
   const startX=useRef(0);
-  const hasMovedSignificant=useRef(false);
+  const hasMoved=useRef(false);
   const [showInput, setShowInput] = useState(false);
   const [tempVal, setTempVal] = useState("");
 
@@ -110,28 +124,26 @@ function SwipeCard({hab,pct,onPct,onEdit,t}){
     if(!rect)return;
     let newPct = Math.round(((clientX-rect.left)/rect.width)*100/5)*5;
     
-    // Optimisation "fois" : On cale la progression sur des nombres entiers si l'unité est "fois"
     if(hab.goalQty && hab.goalUnit === "fois") {
         const curValue = Math.round((newPct/100) * hab.goalQty);
         newPct = (curValue / hab.goalQty) * 100;
     }
-
     onPct(Math.max(0, Math.min(100, newPct)));
   };
 
   const onPD=e=>{
     dragging.current=true;
     startX.current=e.clientX;
-    hasMovedSignificant.current=false;
+    hasMoved.current=false;
     ref.current?.setPointerCapture(e.pointerId);
   };
 
   const onPM=e=>{
     if(!dragging.current) return;
-    if(!hasMovedSignificant.current && Math.abs(e.clientX-startX.current) > 15) {
-        hasMovedSignificant.current = true;
+    if(!hasMoved.current && Math.abs(e.clientX-startX.current) > 15) {
+        hasMoved.current = true;
     }
-    if(hasMovedSignificant.current) apply(e.clientX);
+    if(hasMoved.current) apply(e.clientX);
   };
 
   const onPU=e=>{
@@ -154,11 +166,12 @@ function SwipeCard({hab,pct,onPct,onEdit,t}){
   };
 
   const prog=fmtProgress(hab,pct);
+  const s=streak(hab,{});
 
   return(
-    <div style={{marginBottom:10}}>
+    <div style={{marginBottom:12}}>
         <div ref={ref} onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU} style={{position:"relative",borderRadius:18,overflow:"hidden",background:t.card,border:`1.5px solid ${pct===100?hab.color+"66":t.border}`,cursor:"ew-resize",userSelect:"none",touchAction:"pan-y"}}>
-        <div style={{position:"absolute",inset:0,width:`${pct}%`,background:`linear-gradient(90deg,${hab.color}25,${hab.color}10)`,transition:hasMovedSignificant.current?"none":"width .3s",pointerEvents:"none"}}/>
+        <div style={{position:"absolute",inset:0,width:`${pct}%`,background:`linear-gradient(90deg,${hab.color}25,${hab.color}10)`,transition:hasMoved.current?"none":"width .3s",pointerEvents:"none"}}/>
         <div style={{position:"relative",padding:"14px 16px",display:"flex",alignItems:"center",gap:14,pointerEvents:"none"}}>
             <div onClick={(e)=>{e.stopPropagation(); onPct(pct===100?0:100);}} style={{pointerEvents:"all"}}>
                 <Ring pct={pct} color={pct>0?hab.color:t.muted} size={42} stroke={3.5} t={t}/>
@@ -166,86 +179,36 @@ function SwipeCard({hab,pct,onPct,onEdit,t}){
             
             <div onClick={() => setShowInput(true)} style={{flex:1, minWidth:0, pointerEvents:"all"}}>
             {showInput ? (
-                <input 
-                    autoFocus 
-                    type="number" 
-                    placeholder="Valeur..."
-                    value={tempVal}
-                    onChange={e => setTempVal(e.target.value)}
-                    onBlur={handleInputBlur}
-                    onKeyDown={e => e.key === 'Enter' && handleInputBlur()}
-                    style={{background:'none', border:'none', color:t.text, fontSize:15, fontWeight:700, width:'100%'}}
-                />
+                <input autoFocus type="number" value={tempVal} onChange={e=>setTempVal(e.target.value)} onBlur={handleInputBlur} onKeyDown={e=>e.key==='Enter'&&handleInputBlur()} style={{background:'none', border:'none', color:t.text, fontSize:15, fontWeight:700, width:'100%', fontFamily:t.font}} placeholder="Entrer valeur..."/>
             ) : (
                 <>
-                <div style={{fontWeight:700,fontSize:15,color:pct===100?hab.color:t.text}}>{hab.name}</div>
-                <div style={{fontSize:12,color:t.sub,marginTop:3}}>
+                <div style={{fontWeight:700,fontSize:15,color:pct===100?hab.color:t.text,fontFamily:t.font}}>{hab.name}</div>
+                <div style={{fontSize:12,color:t.sub,marginTop:3,display:"flex",gap:8}}>
+                    {s>0&&<span style={{color:hab.color,fontWeight:600}}>🔥 {s}j</span>}
                     {prog ? <span style={{color:pct>0?hab.color:t.sub}}>{prog}</span> : pct===100 ? <span style={{color:hab.color}}>✓ Terminé !</span> : pct>0 ? <span style={{color:hab.color}}>{pct}%</span> : <span>← Glisse pour avancer</span>}
                 </div>
                 </>
             )}
             </div>
-
-            <button onClick={(e)=>{e.stopPropagation(); onEdit();}} style={{pointerEvents:"all",background:"none",border:"none",color:t.sub,fontSize:16}}>✎</button>
+            <button onClick={(e)=>{e.stopPropagation(); onEdit();}} style={{pointerEvents:"all",background:"none",border:"none",color:t.sub,fontSize:16,padding:"4px 6px"}}>✎</button>
         </div>
         </div>
     </div>
   );
 }
 
-/* ─── FORMULAIRE ─── */
-function HabitForm({hab,onSave,onDelete,onClose,t}){
-  const[name,setName]=useState(hab?.name||"");
-  const[emoji,setEmoji]=useState(hab?.emoji||"🏃");
-  const[color,setColor]=useState(hab?.color||HABIT_COLORS[0]);
-  const[qty,setQty]=useState(hab?.goalQty||1);
-  const[unit,setUnit]=useState(hab?.goalUnit||"fois");
-  const[isMeas,setIsMeas]=useState(!!hab?.goalQty);
-
-  const save=()=>name.trim()&&onSave({name:name.trim(),emoji,color,frequency:"daily",goalQty:isMeas?Number(qty):null,goalUnit:isMeas?unit:""});
-  const inp={width:"100%",padding:"12px",borderRadius:10,border:`1px solid ${t.border}`,background:t.bg,color:t.text,marginBottom:15};
-
-  return(
-    <>
-      <h2 style={{margin:"0 0 20px"}}>{hab?"Modifier":"Nouvelle habitude"}</h2>
-      <input value={name} onChange={e=>setName(e.target.value)} placeholder="Nom" style={inp}/>
-      <input value={emoji} onChange={e=>setEmoji(e.target.value)} placeholder="Emoji" style={inp}/>
-      
-      <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:15}}>
-        <input type="checkbox" checked={isMeas} onChange={e=>setIsMeas(e.target.checked)} id="meas"/>
-        <label htmlFor="meas" style={{fontSize:14}}>Objectif chiffré</label>
-      </div>
-
-      {isMeas && (
-          <div style={{display:"flex", gap:10}}>
-              <input type="number" value={qty} onChange={e=>setQty(e.target.value)} style={{...inp, flex:1}} placeholder="Qté"/>
-              <select value={unit} onChange={e=>setUnit(e.target.value)} style={{...inp, flex:1}}>
-                  {UNITS.map(u=><option key={u} value={u}>{u||"Unité"}</option>)}
-              </select>
-          </div>
-      )}
-
-      <div style={{display:"flex",gap:8,marginBottom:20}}>
-        {HABIT_COLORS.map(c=><button key={c} onClick={()=>setColor(c)} style={{width:30,height:30,borderRadius:"50%",background:c,border:color===c?`3.3px solid #fff`:"none"}}/>)}
-      </div>
-      <button onClick={save} style={{width:"100%",padding:14,background:color,color:"#fff",border:"none",borderRadius:12,fontWeight:700}}>Enregistrer</button>
-      {hab&&<button onClick={()=>onDelete(hab.id)} style={{width:"100%",marginTop:10,background:"none",color:"#f87171",border:"none"}}>Supprimer</button>}
-    </>
-  );
-}
-
+/* ─── APP PRINCIPALE (RESTE DU CODE ORIGINAL) ─── */
 function App(){
   const[habits,setHabits]=useState(store.get(K.habits)||[]);
   const[logs,setLogs]=useState(store.get(K.logs)||{});
+  const[moods,setMoods]=useState(store.get(K.moods)||{});
   const[themeId,setThemeId]=useState(store.get(K.theme)||"nebula");
+  const[tab,setTab]=useState("today");
   const[showForm,setShowForm]=useState(false);
   const[editHab,setEditHab]=useState(null);
-  const[toast,setToast]=useState(null);
   
   const t=THEMES[themeId];
   const td=today();
-
-  const pop=(msg,color)=>{setToast({msg,color});setTimeout(()=>setToast(null),2000);};
 
   const handlePct=(id,val)=>{
     const nl={...logs,[td]:{...(logs[td]||{}),[id]:val}};
@@ -256,26 +219,53 @@ function App(){
     const upd=editHab?habits.map(x=>x.id===editHab.id?{...x,...h}:x):[...habits,{id:Date.now().toString(),...h}];
     setHabits(upd);store.set(K.habits,upd);
     setShowForm(false);setEditHab(null);
-    pop("C'est fait !",h.color);
   };
 
+  const todayHabs=habits.filter(h=>scheduled(h,td));
+  const earnedBadges=BADGES.filter(b=>b.check(habits,logs,moods));
+
   return(
-    <div style={{background:t.bg,minHeight:"100vh",color:t.text,paddingBottom:80}}>
-      {toast&&<Toast msg={toast.msg} color={toast.color}/>}
+    <div style={{background:t.bg,minHeight:"100vh",color:t.text,paddingBottom:80,fontFamily:t.ui}}>
       <div style={{padding:"20px 20px 10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <h1 style={{margin:0,fontSize:24}}>Mes Habitudes</h1>
-        <button onClick={()=>setThemeId(themeId==="nebula"?"organic":"nebula")} style={{background:t.card,border:"none",padding:8,borderRadius:10}}>{themeId==="nebula"?"🌿":"🌌"}</button>
+        <h1 style={{margin:0,fontSize:22,fontFamily:t.font}}>Mes Habitudes</h1>
+        <button onClick={()=>setThemeId(themeId==="nebula"?"organic":"nebula")} style={{background:t.card,border:"none",padding:8,borderRadius:10,fontSize:18}}>{themeId==="nebula"?"🌿":"🌌"}</button>
       </div>
+
       <div style={{padding:20}}>
-        {habits.map(h=><SwipeCard key={h.id} hab={h} pct={logs[td]?.[h.id]||0} onPct={p=>handlePct(h.id,p)} onEdit={()=>{setEditHab(h);setShowForm(true);}} t={t}/>)}
-        <button onClick={()=>{setEditHab(null);setShowForm(true);}} style={{width:"100%",padding:15,marginTop:10,background:t.accent,color:"#fff",border:"none",borderRadius:15,fontWeight:700}}>+ Ajouter</button>
+        {tab==="today" && (
+            todayHabs.length === 0 ? <p style={{textAlign:"center",color:t.sub,marginTop:40}}>Rien pour aujourd'hui !</p> :
+            todayHabs.map(h=><SwipeCard key={h.id} hab={h} pct={logs[td]?.[h.id]||0} onPct={p=>handlePct(h.id,p)} onEdit={()=>{setEditHab(h);setShowForm(true);}} t={t}/>)
+        )}
+        <button onClick={()=>{setEditHab(null);setShowForm(true);}} style={{width:"100%",padding:15,marginTop:10,background:t.accent,color:"#fff",border:"none",borderRadius:15,fontWeight:700,fontSize:15}}>+ Ajouter une habitude</button>
       </div>
+
+      {/* FOOTER TABS SIMPLE */}
+      <div style={{position:"fixed",bottom:0,left:0,right:0,background:t.card,borderTop:`1px solid ${t.border}`,display:"flex",padding:"10px 0 20px"}}>
+        {[{k:"today",i:"☀️",l:"Aujourd'hui"},{k:"week",i:"📅",l:"Semaine"}].map(x=>(
+            <button key={x.k} onClick={()=>setTab(x.k)} style={{flex:1,background:"none",border:"none",color:tab===x.k?t.accent:t.sub,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                <span style={{fontSize:20}}>{x.i}</span>
+                <span style={{fontSize:10,fontWeight:700}}>{x.l}</span>
+            </button>
+        ))}
+      </div>
+
+      <Modal visible={showForm} onClose={()=>setShowForm(false)} t={t}>
+        <div style={{paddingBottom:20}}>
+            <h2 style={{marginBottom:15,fontFamily:t.font}}>{editHab?"Modifier":"Nouveau"}</h2>
+            <input id="h-name" placeholder="Nom de l'habitude" defaultValue={editHab?.name} style={{width:"100%",padding:12,borderRadius:10,border:`1px solid ${t.border}`,background:t.bg,color:t.text,marginBottom:10}}/>
+            <button onClick={()=>{
+                const name=document.getElementById('h-name').value;
+                if(name) handleSave({name,emoji:"🏃",color:HABIT_COLORS[0],frequency:"daily",goalQty:1,goalUnit:"fois"});
+            }} style={{width:"100%",padding:14,background:t.accent,color:"#fff",border:"none",borderRadius:12,fontWeight:700}}>Enregistrer</button>
+            {editHab && <button onClick={()=>{setHabits(habits.filter(x=>x.id!==editHab.id));setShowForm(false);}} style={{width:"100%",marginTop:10,background:"none",border:"none",color:"#f87171"}}>Supprimer</button>}
+        </div>
+      </Modal>
     </div>
   );
 }
 
 const root=ReactDOM.createRoot(document.getElementById("root"));
-root.render(React.createElement(App));
+root.render(<App />);
 </script>
 </body>
 </html>
