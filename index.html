@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8"/>
     <title>TrackHabits</title>
+    <link rel="manifest" href="manifest.json">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta id="theme-color-meta" name="theme-color" content="#0d0d14">
@@ -42,10 +43,10 @@
       ::-webkit-scrollbar{display:none}
     </style>
 
-    <!-- Bibliothèques via CDN -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Bibliothèques locales pour le mode hors-ligne -->
+    <script src="react.production.min.js"></script>
+    <script src="react-dom.production.min.js"></script>
+    <script src="babel.min.js"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -66,6 +67,11 @@ const THEMES={
   nebula:{id:"nebula",label:"🌌 Nebula",bg:"#0d0d14",card:"#14141f",border:"#22223a",text:"#e8e4ff",sub:"#7070aa",muted:"#3a3a5a",accent:"#9b7cff",tab:"#14141f",tabBorder:"#22223a",header:"#14141f",font:"'Space Grotesk',sans-serif",ui:"'Space Grotesk',sans-serif",dark:true},
   neon:{id:"neon",label:"⚡ Neon",bg:"#0a0a0a",card:"#111111",border:"#1f1f1f",text:"#f0f0f0",sub:"#666666",muted:"#333333",accent:"#00ff88",tab:"#111111",tabBorder:"#1f1f1f",header:"#111111",font:"'Syne',sans-serif",ui:"'Syne',sans-serif",dark:true},
   organic:{id:"organic",label:"🌿 Organic",bg:"#f5f0eb",card:"#fffdf9",border:"#e8e0d5",text:"#2c2416",sub:"#8a7a6a",muted:"#b5a898",accent:"#7c9e6e",tab:"#fffdf9",tabBorder:"#e8e0d5",header:"#fffdf9",font:"'Fraunces',serif",ui:"'DM Sans',sans-serif",dark:false},
+  aurora:{id:"aurora",label:"🌅 Aurora",bg:"#0a0f1e",card:"#0f1828",border:"#1a2540",text:"#e2f0ff",sub:"#6a90b8",muted:"#253550",accent:"#38e8c8",tab:"#0f1828",tabBorder:"#1a2540",header:"#0f1828",font:"'Space Grotesk',sans-serif",ui:"'Space Grotesk',sans-serif",dark:true},
+  sakura:{id:"sakura",label:"🌸 Sakura",bg:"#fff5f7",card:"#ffffff",border:"#fad4de",text:"#3d1a24",sub:"#b07080",muted:"#f5c0cc",accent:"#f0527a",tab:"#ffffff",tabBorder:"#fad4de",header:"#ffffff",font:"'Fraunces',serif",ui:"'DM Sans',sans-serif",dark:false},
+  dusk:{id:"dusk",label:"🌇 Dusk",bg:"#1a1025",card:"#221535",border:"#352050",text:"#f0e8ff",sub:"#9070b8",muted:"#3d2860",accent:"#f5a623",tab:"#221535",tabBorder:"#352050",header:"#221535",font:"'Syne',sans-serif",ui:"'Syne',sans-serif",dark:true},
+  slate:{id:"slate",label:"🩶 Slate",bg:"#f0f2f5",card:"#ffffff",border:"#dde2ea",text:"#1a2030",sub:"#6b7a94",muted:"#c8d0dc",accent:"#3b6bff",tab:"#ffffff",tabBorder:"#dde2ea",header:"#ffffff",font:"'DM Sans',sans-serif",ui:"'DM Sans',sans-serif",dark:false},
+  ember:{id:"ember",label:"🔥 Ember",bg:"#120806",card:"#1e0f0a",border:"#3a1c12",text:"#ffe8d8",sub:"#a06050",muted:"#3a1c12",accent:"#ff6b35",tab:"#1e0f0a",tabBorder:"#3a1c12",header:"#1e0f0a",font:"'Syne',sans-serif",ui:"'Syne',sans-serif",dark:true},
 };
 /* Sync browser theme-color to current theme */
 function syncThemeColor(bg){const m=document.getElementById("theme-color-meta");if(m)m.setAttribute("content",bg);}
@@ -133,7 +139,7 @@ function Ring({pct=0,color,size=48,stroke=4,t,hideText=false}){
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeDasharray={`${(pct/100)*c} ${c}`} strokeLinecap="round" style={{transition:"stroke-dasharray .4s ease"}}/>
       </svg>
       {!hideText&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-        {pct>0&&<span style={{fontSize:size*0.22,fontWeight:700,color,fontFamily:"monospace"}}>{pct===100?"✓":`${pct}`}</span>}
+        {pct>0&&pct<100&&<span style={{fontSize:size*0.22,fontWeight:700,color,fontFamily:"monospace"}}>{pct}</span>}
       </div>}
     </div>
   );
@@ -444,22 +450,6 @@ function WeekView({habits,logs,moods,onEdit,onToggle,t}){
   const last7=lastN(7);
   return(
     <>
-      <div style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:16,padding:"14px 16px",marginBottom:16}}>
-        <div style={{fontSize:12,fontWeight:700,color:t.sub,marginBottom:10,textTransform:"uppercase",letterSpacing:1,fontFamily:t.ui}}>7 derniers jours</div>
-        <div style={{display:"flex",alignItems:"flex-end",gap:4,height:60}}>
-          {last7.map((d,i)=>{
-            const sc=dayScore(habits,logs,d)??0,mood=moods[d],barColor=mood?MOODS[mood.mood].color:scoreColor(sc);
-            return(
-              <div key={d} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-                <div style={{width:"100%",background:t.border,borderRadius:4,height:48,display:"flex",alignItems:"flex-end",overflow:"hidden"}}>
-                  <div style={{width:"100%",background:barColor,height:`${sc}%`,borderRadius:4,transition:"height .5s ease"}}/>
-                </div>
-                <span style={{fontSize:8,color:d===td?t.accent:t.muted,fontWeight:d===td?700:400,fontFamily:t.ui}}>{DAYS_FR[i]}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
       <div style={{display:"flex",justifyContent:"space-between",marginBottom:16,gap:3}}>
         {weekDays.map((d,i)=>{
           const sc=dayScore(habits,logs,d)??0,md=moods[d]?MOODS[moods[d].mood]:null,isT=d===td,isFut=d>td;
@@ -649,7 +639,7 @@ function App(){
                 <p style={{fontFamily:t.font}}>Rien de prévu aujourd'hui !</p>
               </div>
             ):(
-              <DragList items={todayHabs} onReorder={ordered=>{const ids=ordered.map(h=>h.id);saveHabits([...ordered,...habits.filter(h=>!ids.includes(h.id))]);}} renderItem={h=>(
+              <DragList items={[...todayHabs].sort((a,b)=>{const aDone=(localProg[a.id]||0)>=100,bDone=(localProg[b.id]||0)>=100;if(aDone!==bDone)return aDone?1:-1;return a.name.localeCompare(b.name,"fr");})} onReorder={ordered=>{const ids=ordered.map(h=>h.id);saveHabits([...ordered,...habits.filter(h=>!ids.includes(h.id))]);}} renderItem={h=>(
                 <SwipeCard key={h.id} hab={h} pct={localProg[h.id]||0} onPct={p=>handleProg(h.id,p)} onEdit={()=>{setEditHab(h);setShowForm(true);}} t={t}/>
               )}/>
             )}
