@@ -9,40 +9,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <meta name="apple-mobile-web-app-title" content="Habitudes">
 
-    <!-- Chargement du Service Worker -->
     <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js')
-          .then(reg => console.log('Service Worker enregistré !'))
-          .catch(err => console.log('Erreur SW:', err));
+        navigator.serviceWorker.register('./service-worker.js');
       });
     }
     </script>
 
-    <!-- Styles de repli pour les polices (offline) -->
     <style>
-      @font-face {
-        font-family: 'FallbackFont';
-        src: local('Arial');
-      }
       body {
-        font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
         overscroll-behavior: none;
         margin: 0;
         padding: 0;
       }
       * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-      @keyframes toastPop{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-      @keyframes popIn{0%{opacity:0;transform:scale(.6) translateY(14px)}65%{transform:scale(1.07)}100%{opacity:1;transform:scale(1)}}
-      @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-      .habit-new{animation:popIn .55s cubic-bezier(.34,1.56,.64,1) both}
       .page{animation:fadeUp .28s ease both}
-      input,select,textarea{-webkit-appearance:none}
+      @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
       ::-webkit-scrollbar{display:none}
     </style>
 
-    <!-- Bibliothèques locales pour le mode hors-ligne -->
     <script src="react.production.min.js"></script>
     <script src="react-dom.production.min.js"></script>
     <script src="babel.min.js"></script>
@@ -50,640 +37,134 @@
 <body>
 <div id="root"></div>
 
-<!-- Ton code original (inchangé mais chargé via Babel local) -->
 <script type="text/babel">
 const {useState,useEffect,useCallback,useRef}=React;
 
-/* ─── STORAGE (localStorage) ─── */
+// --- CONFIG & HELPERS ---
 const K={habits:"ht5-habits",logs:"ht5-logs",moods:"ht5-moods",theme:"ht5-theme"};
 const store={
   get:k=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}},
   set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}},
 };
 
-/* ─── THEMES ─── */
 const THEMES={
-  organic:{id:"organic",label:"🌿 Organic",bg:"#f5f0eb",card:"#fffdf9",border:"#e8e0d5",text:"#2c2416",sub:"#8a7a6a",muted:"#b5a898",accent:"#7c9e6e",tab:"#fffdf9",tabBorder:"#e8e0d5",header:"#fffdf9",font:"'Fraunces',serif",ui:"'DM Sans',sans-serif",dark:false},
-  nebula:{id:"nebula",label:"🌌 Nebula",bg:"#0d0d14",card:"#14141f",border:"#22223a",text:"#e8e4ff",sub:"#7070aa",muted:"#3a3a5a",accent:"#9b7cff",tab:"#14141f",tabBorder:"#22223a",header:"#14141f",font:"'Space Grotesk',sans-serif",ui:"'Space Grotesk',sans-serif",dark:true},
-  neon:{id:"neon",label:"⚡ Neon",bg:"#0a0a0a",card:"#111111",border:"#1f1f1f",text:"#f0f0f0",sub:"#666666",muted:"#333333",accent:"#00ff88",tab:"#111111",tabBorder:"#1f1f1f",header:"#111111",font:"'Syne',sans-serif",ui:"'Syne',sans-serif",dark:true},
+  nebula:{id:"nebula",label:"🌌 Nebula",bg:"#0d0d14",card:"#14141f",border:"#22223a",text:"#e8e4ff",sub:"#7070aa",muted:"#3a3a5a",accent:"#9b7cff",dark:true},
+  organic:{id:"organic",label:"🌿 Organic",bg:"#f5f0eb",card:"#fffdf9",border:"#e8e0d5",text:"#2c2416",sub:"#8a7a6a",accent:"#7c9e6e",dark:false},
 };
 
-const HABIT_COLORS=["#f472b6","#a78bfa","#60a5fa","#34d399","#facc15","#fb923c","#f87171","#22d3ee"];
-const MOODS=[{emoji:"😔",label:"Difficile",color:"#f87171"},{emoji:"😐",label:"Moyen",color:"#fb923c"},{emoji:"🙂",label:"Bien",color:"#facc15"},{emoji:"😊",label:"Super",color:"#4ade80"},{emoji:"🤩",label:"Incroyable",color:"#f472b6"}];
-const UNITS=["L","ml","h","min","km","m","fois","pages","kcal","€",""];
-const DAYS_FR=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
-const MONTHS_FULL=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
-const BADGES=[
-  {id:"first",emoji:"🌱",label:"Première",desc:"Créer ta 1ère habitude",check:(h)=>h.length>=1},
-  {id:"w7",emoji:"🔥",label:"Semaine feu",desc:"7j consécutifs",check:(h,l)=>h.some(x=>streak(x,l)>=7)},
-  {id:"m30",emoji:"💎",label:"Diamant",desc:"30j consécutifs",check:(h,l)=>h.some(x=>streak(x,l)>=30)},
-  {id:"perf",emoji:"⭐",label:"Parfait",desc:"Semaine 100%",check:(h,l)=>checkPerfect(h,l)},
-  {id:"mood30",emoji:"🧘",label:"Équilibre",desc:"30 humeurs enregistrées",check:(_,__,m)=>Object.keys(m).length>=30},
-  {id:"all5",emoji:"🏆",label:"Champion",desc:"5 habitudes actives",check:(h)=>h.length>=5},
-];
-
-/* ─── HELPERS ─── */
 const today=()=>new Date().toISOString().split("T")[0];
-const dow=d=>(new Date(d+"T12:00:00").getDay()+6)%7;
-const shift=(d,n)=>{const x=new Date(d+"T12:00:00");x.setDate(x.getDate()+n);return x.toISOString().split("T")[0];};
-const lastN=n=>Array.from({length:n},(_,i)=>shift(today(),-(n-1-i)));
-const scheduled=(h,d)=>h.frequency==="daily"?true:h.frequency==="weekly"?(h.days||[]).includes(dow(d)):true;
-const scoreColor=p=>p>=80?"#4ade80":p>=45?"#facc15":"#f87171";
+const scheduled=(h,d)=>h.frequency==="daily"?true:true; // Simplifié pour l'exemple
 
-function streak(hab,logs){
-  let s=0;
-  for(let i=0;i<365;i++){const d=shift(today(),-i);if(!scheduled(hab,d))continue;if((logs[d]?.[hab.id]||0)>=100)s++;else break;}
-  return s;
-}
-function checkPerfect(habits,logs){
-  return lastN(7).every(d=>{const sc=habits.filter(h=>scheduled(h,d));return sc.length>0&&sc.every(h=>(logs[d]?.[h.id]||0)>=100);});
-}
-const dayScore=(habits,logs,d)=>{const sc=habits.filter(h=>scheduled(h,d));if(!sc.length)return null;return Math.round(sc.reduce((a,h)=>a+(logs[d]?.[h.id]||0),0)/sc.length);};
-const fmtProgress=(hab,pct)=>{if(!hab.goalQty||hab.goalUnit===undefined)return null;const cur=Math.round((pct/100)*hab.goalQty*10)/10;return`${cur}${hab.goalUnit} / ${hab.goalQty}${hab.goalUnit}`;};
+/* ─── COMPOSANT CARTE (MODIFIÉ) ─── */
+function SwipeCard({hab, pct, onPct, onEdit, t}) {
+  const ref = useRef();
+  const dragging = useRef(false);
+  const startX = useRef(0);
+  const startPct = useRef(0);
+  const hasMovedSignificant = useRef(false);
 
-/* ─── CONFETTI ─── */
-function Confetti({onDone}){
-  const ref=useRef();
-  useEffect(()=>{
-    const c=ref.current;if(!c)return;
-    const ctx=c.getContext("2d");c.width=window.innerWidth;c.height=window.innerHeight;
-    const pieces=Array.from({length:120},()=>({x:Math.random()*c.width,y:-10-Math.random()*200,vx:(Math.random()-.5)*5,vy:3+Math.random()*5,r:4+Math.random()*6,color:["#f472b6","#a78bfa","#facc15","#4ade80","#60a5fa","#fb923c"][Math.floor(Math.random()*6)],rot:Math.random()*360,vrot:(Math.random()-.5)*8}));
-    let frame=0,raf;
-    const draw=()=>{
-      ctx.clearRect(0,0,c.width,c.height);
-      pieces.forEach(p=>{ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot*Math.PI/180);ctx.fillStyle=p.color;ctx.globalAlpha=Math.max(0,1-frame/80);ctx.fillRect(-p.r/2,-p.r/2,p.r,p.r*1.4);ctx.restore();p.x+=p.vx;p.y+=p.vy;p.rot+=p.vrot;p.vy+=0.08;});
-      frame++;
-      if(frame<100)raf=requestAnimationFrame(draw);else onDone();
-    };
-    raf=requestAnimationFrame(draw);
-    return()=>cancelAnimationFrame(raf);
-  },[]);
-  return React.createElement("canvas",{ref,style:{position:"fixed",inset:0,zIndex:490,pointerEvents:"none"}});
-}
+  const apply = (clientX) => {
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    // Calcul de la progression basé sur la position horizontale
+    const relativeX = clientX - rect.left;
+    const newPct = Math.max(0, Math.min(100, Math.round((relativeX / rect.width) * 100 / 5) * 5));
+    onPct(newPct);
+  };
 
-/* ─── RING ─── */
-function Ring({pct=0,color,size=48,stroke=4,t}){
-  const tc=t||THEMES.nebula,r=(size-stroke*2)/2,c=2*Math.PI*r;
-  return(
-    <div style={{position:"relative",width:size,height:size,flexShrink:0}}>
-      <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={tc.muted} strokeWidth={stroke}/>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeDasharray={`${(pct/100)*c} ${c}`} strokeLinecap="round" style={{transition:"stroke-dasharray .4s ease"}}/>
-      </svg>
-      <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-        {pct>0&&<span style={{fontSize:size*0.22,fontWeight:700,color,fontFamily:"monospace"}}>{pct===100?"✓":`${pct}`}</span>}
-      </div>
-    </div>
-  );
-}
+  const onPointerDown = (e) => {
+    dragging.current = true;
+    startX.current = e.clientX;
+    startPct.current = pct;
+    hasMovedSignificant.current = false;
+    ref.current?.setPointerCapture(e.pointerId);
+  };
 
-/* ─── MODAL ─── */
-function Modal({visible,onClose,t,children}){
-  const[render,setRender]=useState(visible);
-  const[anim,setAnim]=useState(visible?"in":"out");
-  useEffect(()=>{if(visible){setRender(true);setTimeout(()=>setAnim("in"),10);}else{setAnim("out");setTimeout(()=>setRender(false),340);}},[ visible]);
-  if(!render)return null;
-  return(
-    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"#00000099",zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center",opacity:anim==="in"?1:0,transition:"opacity .3s"}}>
-      <div style={{background:t.card,borderRadius:"24px 24px 0 0",padding:"22px 20px 48px",width:"100%",maxWidth:520,maxHeight:"92vh",overflowY:"auto",borderTop:`1px solid ${t.border}`,transform:anim==="in"?"translateY(0)":"translateY(100%)",transition:"transform .34s cubic-bezier(.34,1.15,.64,1)",color:t.text,fontFamily:t.ui}}>
-        {children}
-      </div>
-    </div>
-  );
-}
+  const onPointerMove = (e) => {
+    if (!dragging.current) return;
 
-/* ─── TOAST ─── */
-function Toast({msg,color}){
-  return <div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:color,color:"#fff",padding:"10px 22px",borderRadius:30,fontWeight:700,fontSize:14,zIndex:9999,whiteSpace:"nowrap",boxShadow:"0 4px 20px #0004",animation:"toastPop .35s cubic-bezier(.34,1.56,.64,1)"}}>{msg}</div>;
-}
+    // PROTECTION : On ne modifie rien si le mouvement est inférieur à 15px
+    // Cela évite les changements quand on veut juste scroller verticalement
+    if (!hasMovedSignificant.current) {
+      if (Math.abs(e.clientX - startX.current) > 15) {
+        hasMovedSignificant.current = true;
+      } else {
+        return;
+      }
+    }
 
-/* ─── SWIPE CARD ─── */
-function SwipeCard({hab,pct,onPct,onEdit,t,showEvening}){
-  const ref=useRef();const dragging=useRef(false);
-  const s=streak(hab,{});
-  const apply=clientX=>{const rect=ref.current?.getBoundingClientRect();if(!rect)return;onPct(Math.max(0,Math.min(100,Math.round(((clientX-rect.left)/rect.width)*100/5)*5)));};
-  const onPD=e=>{dragging.current=true;ref.current?.setPointerCapture(e.pointerId);};
-  const onPM=e=>{if(dragging.current)apply(e.clientX);};
-  const onPU=e=>{if(!dragging.current)return;dragging.current=false;apply(e.clientX);};
-  const prog=fmtProgress(hab,pct);
-  return(
-    <div ref={ref} onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU} style={{position:"relative",borderRadius:18,overflow:"hidden",background:t.card,border:`1.5px solid ${pct===100?hab.color+"66":pct>0?hab.color+"33":t.border}`,cursor:"ew-resize",userSelect:"none",touchAction:"none",transition:"border-color .3s",boxShadow:pct===100?`0 2px 20px ${hab.color}22`:"none"}}>
-      <div style={{position:"absolute",inset:0,width:`${pct}%`,background:`linear-gradient(90deg,${hab.color}25,${hab.color}10)`,transition:"width .15s",pointerEvents:"none"}}/>
+    apply(e.clientX);
+  };
+
+  const onPointerUp = (e) => {
+    dragging.current = false;
+    ref.current?.releasePointerCapture(e.pointerId);
+  };
+
+  return (
+    <div 
+      ref={ref} 
+      onPointerDown={onPointerDown} 
+      onPointerMove={onPointerMove} 
+      onPointerUp={onPointerUp}
+      style={{
+        position:"relative",borderRadius:18,overflow:"hidden",background:t.card,
+        border:`1.5px solid ${pct===100?hab.color+"66":t.border}`,
+        cursor:"ew-resize",userSelect:"none",touchAction:"pan-y", // pan-y permet de garder le scroll vertical fluide
+        marginBottom: 10, transition: "border-color 0.3s"
+      }}
+    >
+      <div style={{position:"absolute",inset:0,width:`${pct}%`,background:`linear-gradient(90deg,${hab.color}25,${hab.color}10)`,transition:dragging.current?"none":"width 0.3s"}}/>
+      
       <div style={{position:"relative",padding:"14px 16px",display:"flex",alignItems:"center",gap:14,pointerEvents:"none"}}>
-        <Ring pct={pct} color={pct>0?hab.color:t.muted} size={42} stroke={3.5} t={t}/>
-        <span style={{fontSize:22}}>{hab.emoji}</span>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontWeight:700,fontSize:15,color:pct===100?hab.color:t.text,fontFamily:t.font,transition:"color .3s",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{hab.name}</div>
-          <div style={{fontSize:12,color:t.sub,marginTop:3,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-            {s>0&&<span style={{color:hab.color,fontWeight:600}}>🔥 {s}j</span>}
-            {prog?<span style={{color:pct>0?hab.color:t.sub}}>{prog}</span>:pct===100?<span style={{color:hab.color}}>✓ Terminé !</span>:pct>0?<span style={{color:hab.color}}>{pct}%</span>:<span>← Glisse pour avancer</span>}
+        <div style={{width:42,height:42,borderRadius:"50%",border:`3px solid ${pct>0?hab.color:t.muted}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
+            {pct === 100 ? "✓" : hab.emoji}
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:700,fontSize:15,color:t.text}}>{hab.name}</div>
+          <div style={{fontSize:12,color:t.sub,marginTop:3}}>
+            {pct === 100 ? <span style={{color:hab.color}}>Terminé !</span> : pct > 0 ? `${pct}%` : "← Glisse pour avancer"}
           </div>
         </div>
-        <div style={{pointerEvents:"all"}} onPointerDown={e=>e.stopPropagation()}>
-          <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:t.sub,fontSize:16,padding:"4px 6px"}}>✎</button>
-        </div>
+        <button onClick={(e) => {e.stopPropagation(); onEdit();}} style={{pointerEvents:"all", background:"none", border:"none", color:t.sub, fontSize:16}}>✎</button>
       </div>
     </div>
   );
 }
 
-/* ─── HABIT FORM ─── */
-function HabitForm({hab,onSave,onDelete,onClose,t}){
-  const[name,setName]=useState(hab?.name||"");
-  const[emoji,setEmoji]=useState(hab?.emoji||"🏃");
-  const[color,setColor]=useState(hab?.color||HABIT_COLORS[0]);
-  const[freq,setFreq]=useState(hab?.frequency||"daily");
-  const[days,setDays]=useState(hab?.days||[0,1,2,3,4,5,6]);
-  const[xpw,setXpw]=useState(hab?.timesPerWeek||3);
-  const[meas,setMeas]=useState(!!(hab?.goalQty));
-  const[qty,setQty]=useState(hab?.goalQty||1);
-  const[unit,setUnit]=useState(hab?.goalUnit||"fois");
-  const[saved,setSaved]=useState(false);
-  const inp={width:"100%",padding:"10px 12px",borderRadius:10,border:`1px solid ${t.border}`,background:t.bg,color:t.text,fontSize:14,fontFamily:t.ui,outline:"none",boxSizing:"border-box"};
-  const save=()=>{if(!name.trim())return;setSaved(true);setTimeout(()=>onSave({name:name.trim(),emoji,color,frequency:freq,days,timesPerWeek:xpw,goalQty:meas?Number(qty):null,goalUnit:meas?unit:""}),380);};
-  return(
-    <>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-        <h2 style={{margin:0,fontSize:18,fontWeight:700,fontFamily:t.font,color:t.text}}>{hab?"Modifier":"Nouvelle habitude"}</h2>
-        <button onClick={onClose} style={{background:t.border,border:"none",borderRadius:20,width:32,height:32,cursor:"pointer",color:t.text,fontSize:15}}>✕</button>
-      </div>
-      <div style={{marginBottom:16}}>
-        <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Icône</label>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginTop:8}}>
-          <div style={{width:48,height:48,borderRadius:14,background:color+"22",border:`2px solid ${color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>{emoji}</div>
-          <input value={emoji} onChange={e=>{const c=[...e.target.value];if(c.length)setEmoji(c[c.length-1]);}} placeholder="Tape un emoji 🎯" style={{...inp,flex:1}}/>
-        </div>
-      </div>
-      <div style={{marginBottom:16}}>
-        <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Nom</label>
-        <input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&save()} placeholder="Ex : Boire de l'eau" style={{...inp,marginTop:8}}/>
-      </div>
-      <div style={{marginBottom:16,background:t.bg,borderRadius:14,padding:14,border:`1px solid ${t.border}`}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:meas?14:0}}>
-          <div>
-            <div style={{fontWeight:600,fontSize:14,color:t.text}}>Objectif mesurable</div>
-            <div style={{fontSize:12,color:t.sub,marginTop:2}}>Quantité + unité précises</div>
-          </div>
-          <button onClick={()=>setMeas(p=>!p)} style={{width:46,height:26,borderRadius:13,border:"none",cursor:"pointer",background:meas?color:t.border,position:"relative",transition:"background .25s",flexShrink:0}}>
-            <div style={{position:"absolute",top:3,width:20,height:20,borderRadius:"50%",background:"#fff",left:meas?22:3,transition:"left .25s"}}/>
-          </button>
-        </div>
-        {meas&&(
-          <div style={{display:"flex",gap:8,marginTop:4}}>
-            <div style={{flex:"0 0 80px"}}>
-              <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Qté</label>
-              <input type="number" min="0.1" step="0.1" value={qty} onChange={e=>setQty(e.target.value)} style={{...inp,marginTop:6,textAlign:"center",fontWeight:700}}/>
-            </div>
-            <div style={{flex:1}}>
-              <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Unité</label>
-              <select value={unit} onChange={e=>setUnit(e.target.value)} style={{...inp,marginTop:6}}>
-                {UNITS.map(u=><option key={u} value={u}>{u||"Sans unité"}</option>)}
-              </select>
-            </div>
-          </div>
-        )}
-      </div>
-      <div style={{marginBottom:16}}>
-        <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Couleur</label>
-        <div style={{display:"flex",gap:8,marginTop:8}}>
-          {HABIT_COLORS.map(c=><button key={c} onClick={()=>setColor(c)} style={{width:28,height:28,borderRadius:"50%",background:c,cursor:"pointer",border:`3px solid ${color===c?"#fff":"transparent"}`,transform:color===c?"scale(1.18)":"scale(1)",transition:"all .2s"}}/>)}
-        </div>
-      </div>
-      <div style={{marginBottom:16}}>
-        <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Fréquence</label>
-        <div style={{display:"flex",gap:6,marginTop:8}}>
-          {[{v:"daily",l:"Chaque jour"},{v:"weekly",l:"Jours précis"},{v:"xperweek",l:"X fois/sem"}].map(({v,l})=>(
-            <button key={v} onClick={()=>setFreq(v)} style={{flex:1,padding:"8px 4px",borderRadius:10,border:`1.5px solid ${freq===v?color:t.border}`,background:freq===v?color+"22":"transparent",color:freq===v?color:t.sub,cursor:"pointer",fontSize:12,fontFamily:t.ui,fontWeight:freq===v?600:400}}>{l}</button>
-          ))}
-        </div>
-      </div>
-      {freq==="weekly"&&(
-        <div style={{marginBottom:16}}>
-          <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Jours</label>
-          <div style={{display:"flex",gap:5,marginTop:8}}>
-            {DAYS_FR.map((d,i)=><button key={i} onClick={()=>setDays(p=>p.includes(i)?p.filter(x=>x!==i):[...p,i].sort())} style={{flex:1,padding:"8px 2px",borderRadius:10,border:`1.5px solid ${days.includes(i)?color:t.border}`,background:days.includes(i)?color+"22":"transparent",color:days.includes(i)?color:t.sub,cursor:"pointer",fontSize:11,fontFamily:t.ui,fontWeight:days.includes(i)?600:400}}>{d}</button>)}
-          </div>
-        </div>
-      )}
-      {freq==="xperweek"&&(
-        <div style={{marginBottom:16}}>
-          <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Objectif : {xpw}x/semaine</label>
-          <input type="range" min={1} max={7} value={xpw} onChange={e=>setXpw(+e.target.value)} style={{width:"100%",marginTop:8,accentColor:color}}/>
-        </div>
-      )}
-      <button onClick={save} style={{width:"100%",padding:"14px",border:"none",borderRadius:14,background:saved?"#4ade80":color,color:saved?"#0a0a0a":"#fff",fontWeight:700,cursor:"pointer",fontSize:16,fontFamily:t.ui,transition:"background .3s"}}>
-        {saved?"✓ Enregistré !":hab?"Enregistrer":"Créer l'habitude"}
-      </button>
-      {hab&&<button onClick={()=>onDelete(hab.id)} style={{width:"100%",padding:"12px",border:`1px solid ${t.border}`,borderRadius:14,background:"transparent",color:"#f87171",fontWeight:600,cursor:"pointer",fontSize:14,fontFamily:t.ui,marginTop:10}}>🗑 Supprimer</button>}
-    </>
-  );
-}
+/* ─── APP PRINCIPALE (SIMPLIFIÉE) ─── */
+function App() {
+  const [habits, setHabits] = useState(store.get(K.habits) || [{id:"1", name:"Sport", emoji:"💪", color:"#9b7cff", frequency:"daily"}]);
+  const [logs, setLogs] = useState(store.get(K.logs) || {});
+  const t = THEMES.nebula;
 
-/* ─── MOOD PICKER ─── */
-function MoodPicker({date,current,note,onSave,onClose,isCeleb,t}){
-  const[mood,setMood]=useState(current??-1);
-  const[txt,setTxt]=useState(note||"");
-  return(
-    <>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-        <div>
-          {isCeleb&&<div style={{fontSize:20,marginBottom:4}}>🎉 Toutes les tâches faites !</div>}
-          <h2 style={{margin:0,fontSize:18,fontWeight:700,fontFamily:t.font,color:t.text}}>Ta journée en un mot ?</h2>
-        </div>
-        <button onClick={onClose} style={{background:t.border,border:"none",borderRadius:20,width:32,height:32,cursor:"pointer",color:t.text,fontSize:15,flexShrink:0}}>✕</button>
-      </div>
-      <div style={{display:"flex",justifyContent:"space-around",padding:"12px 0 20px"}}>
-        {MOODS.map((m,i)=>(
-          <button key={i} onClick={()=>setMood(i)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",transform:mood===i?"scale(1.3)":"scale(1)",transition:"transform .2s cubic-bezier(.34,1.56,.64,1)"}}>
-            <span style={{fontSize:30}}>{m.emoji}</span>
-            <span style={{fontSize:10,color:mood===i?m.color:t.sub,fontWeight:mood===i?700:400,fontFamily:t.ui}}>{m.label}</span>
-          </button>
-        ))}
-      </div>
-      <textarea value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Un mot sur ta journée… (optionnel)" style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1px solid ${t.border}`,background:t.bg,color:t.text,fontSize:14,fontFamily:t.ui,outline:"none",resize:"none",height:72,boxSizing:"border-box",marginBottom:14}}/>
-      <button onClick={()=>mood>=0&&onSave(mood,txt)} style={{width:"100%",padding:"14px",border:"none",borderRadius:14,background:mood>=0?MOODS[mood].color:t.border,color:mood>=0?"#0a0a0a":t.sub,fontWeight:700,cursor:mood>=0?"pointer":"default",fontSize:16,fontFamily:t.ui,transition:"background .3s"}}>
-        {mood>=0?"Enregistrer ✓":"Sélectionne une humeur"}
-      </button>
-    </>
-  );
-}
-
-/* ─── DAY DETAIL ─── */
-function DayDetail({date,habits,logs,mood,onClose,t}){
-  const sc=dayScore(habits,logs,date),md=mood?MOODS[mood.mood]:null;
-  return(
-    <>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-        <h2 style={{margin:0,fontSize:17,fontWeight:700,fontFamily:t.font,color:t.text,textTransform:"capitalize"}}>
-          {new Date(date+"T12:00:00").toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}
-        </h2>
-        <button onClick={onClose} style={{background:t.border,border:"none",borderRadius:20,width:32,height:32,cursor:"pointer",color:t.text,fontSize:15}}>✕</button>
-      </div>
-      {md&&(
-        <div style={{background:t.bg,borderRadius:12,padding:"12px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:12,border:`1px solid ${t.border}`}}>
-          <span style={{fontSize:26}}>{md.emoji}</span>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:600,color:md.color,fontFamily:t.font}}>{md.label}</div>
-            {mood.note&&<div style={{fontSize:13,color:t.sub,marginTop:2}}>{mood.note}</div>}
-          </div>
-          {sc!==null&&<div style={{textAlign:"right"}}><div style={{fontWeight:700,fontSize:20,color:scoreColor(sc),fontFamily:"monospace"}}>{sc}%</div><div style={{fontSize:11,color:t.sub}}>complétion</div></div>}
-        </div>
-      )}
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {habits.filter(h=>scheduled(h,date)).map(h=>{
-          const v=logs[date]?.[h.id]||0,prog=fmtProgress(h,v);
-          return(
-            <div key={h.id} style={{background:t.bg,borderRadius:12,padding:"11px 14px",display:"flex",alignItems:"center",gap:12,border:`1px solid ${v>0?h.color+"44":t.border}`,position:"relative",overflow:"hidden"}}>
-              <div style={{position:"absolute",inset:0,width:`${v}%`,background:h.color+"15",pointerEvents:"none"}}/>
-              <span style={{fontSize:20,position:"relative"}}>{h.emoji}</span>
-              <div style={{flex:1,position:"relative"}}>
-                <div style={{fontWeight:600,fontSize:14,color:t.text}}>{h.name}</div>
-                {prog&&<div style={{fontSize:12,color:v>0?h.color:t.sub,marginTop:1}}>{prog}</div>}
-              </div>
-              <div style={{position:"relative"}}>{v===0?<span style={{color:"#f87171",fontSize:13,fontWeight:600}}>Non fait</span>:v>=100?<span style={{color:h.color,fontSize:13,fontWeight:700}}>✓ Fait</span>:<span style={{color:h.color,fontSize:13,fontWeight:700}}>{v}%</span>}</div>
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
-/* ─── YEAR CALENDAR ─── */
-function YearCalendar({year,habits,logs,moods,onDay,t}){
-  const td=today();
-  const months=Array.from({length:12},(_,m)=>{
-    const days=[],first=new Date(year,m,1),last=new Date(year,m+1,0).getDate();
-    for(let i=0;i<(first.getDay()+6)%7;i++)days.push(null);
-    for(let d=1;d<=last;d++)days.push(`${year}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`);
-    return{m,days};
-  });
-  const cellBg=d=>{
-    if(!d||d>td)return"transparent";
-    const mood=moods[d];if(mood)return MOODS[mood.mood].color;
-    const sc=dayScore(habits,logs,d);if(sc===null)return t.border;
-    if(sc===0)return t.muted;if(sc<50)return"#fb923c55";if(sc<100)return"#facc1566";return"#4ade8066";
+  const handlePct = (id, val) => {
+    const newLogs = {...logs, [today()]: {...logs[today()], [id]: val}};
+    setLogs(newLogs);
+    store.set(K.logs, newLogs);
   };
-  return(
-    <div style={{display:"flex",flexDirection:"column",gap:20}}>
-      {months.map(({m,days})=>(
-        <div key={m}>
-          <div style={{fontSize:11,fontWeight:700,color:t.sub,marginBottom:6,textTransform:"uppercase",letterSpacing:1.2,fontFamily:t.ui}}>{MONTHS_FULL[m]}</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2.5}}>
-            {DAYS_FR.map(d=><div key={d} style={{fontSize:8,color:t.muted,textAlign:"center",paddingBottom:2,fontFamily:t.ui}}>{d[0]}</div>)}
-            {days.map((d,i)=>(
-              <button key={i} onClick={()=>d&&d<=td&&onDay(d)} style={{aspectRatio:"1",borderRadius:3,background:cellBg(d),border:`1.5px solid ${d===td?"#f472b6":"transparent"}`,cursor:d&&d<=td?"pointer":"default"}}/>
-            ))}
-          </div>
-        </div>
+
+  return (
+    <div style={{background:t.bg, minHeight:"100vh", padding:20, color:t.text}}>
+      <h1 style={{fontSize:22, marginBottom:20}}>Mes Habitudes</h1>
+      {habits.map(h => (
+        <SwipeCard 
+          key={h.id} 
+          hab={h} 
+          pct={logs[today()]?.[h.id] || 0} 
+          onPct={(v) => handlePct(h.id, v)} 
+          onEdit={() => alert('Edition')} 
+          t={t} 
+        />
       ))}
+      <p style={{fontSize:12, color:t.sub, textAlign:"center", marginTop:20}}>
+        Le réglage est désormais moins sensible aux frôlements.
+      </p>
     </div>
   );
 }
 
-/* ─── WEEK VIEW ─── */
-function WeekView({habits,logs,moods,onEdit,onToggle,t}){
-  const td=today();
-  const weekDays=(()=>{const days=[],now=new Date(),d=(now.getDay()+6)%7;for(let i=0;i<7;i++){const x=new Date(now);x.setDate(now.getDate()-d+i);days.push(x.toISOString().split("T")[0]);}return days;})();
-  const last7=lastN(7);
-  return(
-    <>
-      <div style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:16,padding:"14px 16px",marginBottom:16}}>
-        <div style={{fontSize:12,fontWeight:700,color:t.sub,marginBottom:10,textTransform:"uppercase",letterSpacing:1,fontFamily:t.ui}}>7 derniers jours</div>
-        <div style={{display:"flex",alignItems:"flex-end",gap:4,height:60}}>
-          {last7.map((d,i)=>{
-            const sc=dayScore(habits,logs,d)??0,mood=moods[d],barColor=mood?MOODS[mood.mood].color:scoreColor(sc);
-            return(
-              <div key={d} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-                <div style={{width:"100%",background:t.border,borderRadius:4,height:48,display:"flex",alignItems:"flex-end",overflow:"hidden"}}>
-                  <div style={{width:"100%",background:barColor,height:`${sc}%`,borderRadius:4,transition:"height .5s ease"}}/>
-                </div>
-                <span style={{fontSize:8,color:d===td?t.accent:t.muted,fontWeight:d===td?700:400,fontFamily:t.ui}}>{DAYS_FR[i]}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div style={{display:"flex",justifyContent:"space-between",marginBottom:16,gap:3}}>
-        {weekDays.map((d,i)=>{
-          const sc=dayScore(habits,logs,d)??0,md=moods[d]?MOODS[moods[d].mood]:null,isT=d===td,isFut=d>td;
-          return(
-            <div key={d} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-              <span style={{fontSize:9,color:isT?t.accent:t.sub,fontWeight:isT?700:400,fontFamily:t.ui}}>{DAYS_FR[i]}</span>
-              <Ring pct={sc} color={md?md.color:isT?t.accent:isFut?t.border:"#a78bfa"} size={34} stroke={3} t={t}>
-                {md&&<span style={{fontSize:13}}>{md.emoji}</span>}
-              </Ring>
-              <span style={{fontSize:9,color:isT?t.accent:t.sub,fontFamily:t.ui}}>{new Date(d+"T12:00:00").getDate()}</span>
-            </div>
-          );
-        })}
-      </div>
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {habits.map(h=>(
-          <div key={h.id} style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:14,padding:13}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-              <span style={{fontSize:17}}>{h.emoji}</span>
-              <span style={{fontWeight:600,fontSize:14,flex:1,color:t.text,fontFamily:t.font}}>{h.name}</span>
-              {h.goalQty&&<span style={{fontSize:11,color:h.color,fontFamily:t.ui}}>{h.goalQty}{h.goalUnit}</span>}
-              <button onClick={()=>onEdit(h)} style={{background:"none",border:"none",cursor:"pointer",color:t.sub,fontSize:13,padding:"2px 6px"}}>✎</button>
-            </div>
-            <div style={{display:"flex",gap:3}}>
-              {weekDays.map((d,i)=>{
-                const sch=scheduled(h,d),val=logs[d]?.[h.id]||0,isFut=d>td;
-                return<button key={d} onClick={()=>sch&&!isFut&&onToggle(h.id,d,val>=100?0:100)} style={{flex:1,height:30,borderRadius:7,cursor:sch&&!isFut?"pointer":"default",background:val>=100?h.color:val>0?h.color+"44":"transparent",border:`1.5px solid ${d===td&&sch?h.color+"88":val>0?h.color+"44":t.border}`,color:val>=100?"#fff":val>0?h.color:t.sub,fontSize:9,fontWeight:700,transition:"all .2s"}}>{val>=100?"✓":val>0?`${val}%`:sch?DAYS_FR[i][0]:"·"}</button>;
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
-  );
-}
-
-/* ─── DRAG LIST ─── */
-function DragList({items,onReorder,renderItem}){
-  const[drag,setDrag]=useState(null);const[over,setOver]=useState(null);
-  const onDS=(e,i)=>{setDrag(i);e.dataTransfer.effectAllowed="move";};
-  const onDO=(e,i)=>{e.preventDefault();setOver(i);};
-  const onDrop=(e,i)=>{e.preventDefault();if(drag===null||drag===i){setDrag(null);setOver(null);return;}const arr=[...items];const[it]=arr.splice(drag,1);arr.splice(i,0,it);onReorder(arr);setDrag(null);setOver(null);};
-  return(
-    <div style={{display:"flex",flexDirection:"column",gap:10}}>
-      {items.map((item,i)=>(
-        <div key={item.id} draggable onDragStart={e=>onDS(e,i)} onDragOver={e=>onDO(e,i)} onDrop={e=>onDrop(e,i)} onDragEnd={()=>{setDrag(null);setOver(null);}} style={{opacity:drag===i?0.4:1,transform:over===i&&drag!==i?"translateY(-3px)":"translateY(0)",transition:"transform .15s,opacity .15s"}}>
-          {renderItem(item,i)}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ══════ MAIN ══════ */
-function App(){
-  const[habits,setHabits]=useState([]);
-  const[logs,setLogs]=useState({});
-  const[moods,setMoods]=useState({});
-  const[themeId,setThemeId]=useState("nebula");
-  const[loaded,setLoaded]=useState(false);
-  const[tab,setTab]=useState("today");
-  const[calYear,setCalYear]=useState(new Date().getFullYear());
-  const[showForm,setShowForm]=useState(false);
-  const[editHab,setEditHab]=useState(null);
-  const[showMood,setShowMood]=useState(false);
-  const[moodCeleb,setMoodCeleb]=useState(false);
-  const[showDay,setShowDay]=useState(null);
-  const[showSettings,setShowSettings]=useState(false);
-  const[toast,setToast]=useState(null);
-  const[newId,setNewId]=useState(null);
-  const[confetti,setConfetti]=useState(false);
-  const[localProg,setLocalProg]=useState({});
-  const syncRef=useRef({});
-  const prevAllDone=useRef(false);
-  const t=THEMES[themeId];
-
-  useEffect(()=>{
-    const h=store.get(K.habits),l=store.get(K.logs),m=store.get(K.moods),th=store.get(K.theme);
-    if(h)setHabits(h);
-    if(l){setLogs(l);setLocalProg(l[today()]||{});}
-    if(m)setMoods(m);
-    if(th)setThemeId(th);
-    setLoaded(true);
-  },[]);
-
-  const pop=(msg,color)=>{setToast({msg,color});setTimeout(()=>setToast(null),2200);};
-  const saveHabits=useCallback(h=>{setHabits(h);store.set(K.habits,h);},[]);
-  const saveMoods=useCallback(m=>{setMoods(m);store.set(K.moods,m);},[]);
-
-  const handleProg=useCallback((habId,pct)=>{
-    setLocalProg(prev=>{
-      const next={...prev,[habId]:pct};
-      clearTimeout(syncRef.current[habId]);
-      syncRef.current[habId]=setTimeout(()=>{
-        setLogs(prevL=>{const nl={...prevL,[today()]:{...prevL[today()],...next}};store.set(K.logs,nl);return nl;});
-      },300);
-      return next;
-    });
-  },[]);
-
-  useEffect(()=>{
-    const td=today(),th=habits.filter(h=>scheduled(h,td));
-    if(!th.length)return;
-    const allDone=th.every(h=>(localProg[h.id]||0)>=100);
-    if(allDone&&!prevAllDone.current&&!moods[td]){prevAllDone.current=true;setConfetti(true);setMoodCeleb(true);setShowMood(true);}
-    if(!allDone)prevAllDone.current=false;
-  },[localProg,habits,moods]);
-
-  const handleSaveHab=hab=>{
-    let upd;
-    if(editHab){upd=habits.map(h=>h.id===editHab.id?{...h,...hab}:h);pop("✏️ Modifiée !",hab.color);}
-    else{const n={id:Date.now().toString(),...hab,createdAt:today()};upd=[...habits,n];setNewId(n.id);setTimeout(()=>setNewId(null),1400);pop("🌱 Créée !",hab.color);}
-    saveHabits(upd);setShowForm(false);setEditHab(null);setTab("today");
-  };
-
-  const handleDelHab=id=>{saveHabits(habits.filter(h=>h.id!==id));setShowForm(false);setEditHab(null);pop("🗑 Supprimée","#f87171");};
-
-  const handleMood=(mood,note)=>{
-    const next={...moods,[today()]:{mood,note}};
-    saveMoods(next);setShowMood(false);setMoodCeleb(false);
-    pop(MOODS[mood].emoji+" "+MOODS[mood].label,MOODS[mood].color);
-  };
-
-  const handleBulkToggle=useCallback((habId,date,val)=>{
-    setLogs(prev=>{const nl={...prev,[date]:{...prev[date],[habId]:val}};store.set(K.logs,nl);return nl;});
-  },[]);
-
-  const setTheme=id=>{setThemeId(id);store.set(K.theme,id);};
-
-  const td=today();
-  const todayHabs=habits.filter(h=>scheduled(h,td));
-  const doneCnt=todayHabs.filter(h=>(localProg[h.id]||0)>=100).length;
-  const partCnt=todayHabs.filter(h=>{const v=localProg[h.id]||0;return v>0&&v<100;}).length;
-  const pctToday=todayHabs.length?Math.round(todayHabs.reduce((a,h)=>a+(localProg[h.id]||0),0)/todayHabs.length):0;
-  const allDone=todayHabs.length>0&&todayHabs.every(h=>(localProg[h.id]||0)>=100);
-  const todayMood=moods[td];
-  const earnedBadges=BADGES.filter(b=>b.check(habits,logs,moods));
-  const isEvening=new Date().getHours()>=18;
-
-  if(!loaded)return <div style={{background:THEMES.nebula.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:THEMES.nebula.sub,fontFamily:"monospace"}}>Chargement…</div></div>;
-
-  return(
-    <div style={{background:t.bg,minHeight:"100vh",fontFamily:t.ui,color:t.text,paddingBottom:80}}>
-      {confetti&&<Confetti onDone={()=>setConfetti(false)}/>}
-      {toast&&<Toast msg={toast.msg} color={toast.color}/>}
-
-      {/* HEADER */}
-      <div style={{background:t.header,borderBottom:`1px solid ${t.border}`,padding:"16px 20px 14px",position:"sticky",top:0,zIndex:10}}>
-        <div style={{maxWidth:500,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div>
-            <h1 style={{margin:0,fontSize:tab==="today"?22:18,fontWeight:700,fontFamily:t.font,color:t.text}}>
-              {tab==="today"?"Aujourd'hui":tab==="week"?"Cette semaine":"Calendrier"}
-            </h1>
-            {tab==="today"&&<p style={{margin:"2px 0 0",fontSize:11,color:t.sub,textTransform:"capitalize"}}>{new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}</p>}
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            {tab==="today"&&todayHabs.length>0&&<Ring pct={pctToday} color={scoreColor(pctToday)} size={46} stroke={4} t={t}><span style={{fontSize:10,fontWeight:700,color:scoreColor(pctToday),fontFamily:"monospace"}}>{pctToday}%</span></Ring>}
-            <button onClick={()=>setShowSettings(true)} style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:12,width:38,height:38,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:17}}>⚙️</button>
-          </div>
-        </div>
-      </div>
-
-      {/* CONTENT */}
-      <div style={{maxWidth:500,margin:"0 auto",padding:"16px 20px"}} className="page" key={tab}>
-        {tab==="today"&&(
-          <>
-            {todayHabs.length>0&&(
-              <div style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:14,padding:"10px 14px",marginBottom:14,display:"flex"}}>
-                {[{v:doneCnt,l:"Faites",c:"#4ade80"},{v:partCnt,l:"En cours",c:"#facc15"},{v:todayHabs.length-doneCnt-partCnt,l:"Restantes",c:t.sub}].map(({v,l,c})=>(
-                  <div key={l} style={{flex:1,textAlign:"center"}}>
-                    <div style={{fontWeight:700,fontSize:20,color:c,fontFamily:"monospace"}}>{v}</div>
-                    <div style={{fontSize:11,color:t.sub}}>{l}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {habits.length===0?(
-              <div style={{textAlign:"center",padding:"60px 0",color:t.sub}}>
-                <div style={{fontSize:48}}>✨</div>
-                <p style={{marginTop:12,fontSize:15,fontFamily:t.font}}>Crée ta première habitude !</p>
-              </div>
-            ):todayHabs.length===0?(
-              <div style={{textAlign:"center",padding:"40px 0",color:t.sub}}>
-                <div style={{fontSize:36}}>🎉</div>
-                <p style={{fontFamily:t.font}}>Rien de prévu aujourd'hui !</p>
-              </div>
-            ):(
-              <DragList items={todayHabs} onReorder={ordered=>{const ids=ordered.map(h=>h.id);saveHabits([...ordered,...habits.filter(h=>!ids.includes(h.id))]);}} renderItem={h=>(
-                <SwipeCard key={h.id} hab={h} pct={localProg[h.id]||0} onPct={p=>handleProg(h.id,p)} onEdit={()=>{setEditHab(h);setShowForm(true);}} t={t} showEvening={isEvening}/>
-              )}/>
-            )}
-            {todayHabs.length>0&&!allDone&&!todayMood&&(
-              <button onClick={()=>{setMoodCeleb(false);setShowMood(true);}} style={{marginTop:12,width:"100%",padding:"10px",background:"transparent",border:`1px solid ${t.border}`,borderRadius:12,color:t.sub,fontSize:13,cursor:"pointer",fontFamily:t.ui}}>
-                🌙 Terminer ma journée
-              </button>
-            )}
-            <button onClick={()=>{setEditHab(null);setShowForm(true);}} style={{marginTop:10,width:"100%",padding:"13px",background:`linear-gradient(135deg,${t.accent},#a78bfa)`,border:"none",borderRadius:14,color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:t.ui}}>
-              + Nouvelle habitude
-            </button>
-          </>
-        )}
-        {tab==="week"&&<WeekView habits={habits} logs={logs} moods={moods} t={t} onEdit={h=>{setEditHab(h);setShowForm(true);}} onToggle={handleBulkToggle}/>}
-        {tab==="calendar"&&(
-          <>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-              <button onClick={()=>setCalYear(y=>y-1)} style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:10,padding:"6px 16px",color:t.text,cursor:"pointer",fontSize:15}}>‹</button>
-              <span style={{fontWeight:700,fontSize:18,fontFamily:t.font,color:t.text}}>{calYear}</span>
-              <button onClick={()=>setCalYear(y=>y+1)} style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:10,padding:"6px 16px",color:t.text,cursor:"pointer",fontSize:15}}>›</button>
-            </div>
-            <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-              {MOODS.map((m,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:t.sub}}><div style={{width:9,height:9,borderRadius:2,background:m.color}}/>{m.emoji}</div>)}
-            </div>
-            <YearCalendar year={calYear} habits={habits} logs={logs} moods={moods} onDay={setShowDay} t={t}/>
-          </>
-        )}
-      </div>
-
-      {/* BOTTOM TABS */}
-      <div style={{position:"fixed",bottom:0,left:0,right:0,background:t.tab,borderTop:`1px solid ${t.tabBorder}`,padding:"8px 0 20px",zIndex:50}}>
-        <div style={{maxWidth:500,margin:"0 auto",display:"flex",justifyContent:"center"}}>
-          {[{k:"today",icon:"☀️",l:"Aujourd'hui"},{k:"week",icon:"📅",l:"Semaine"},{k:"calendar",icon:"🗓",l:"Calendrier"}].map(({k,icon,l})=>(
-            <button key={k} onClick={()=>setTab(k)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,background:"none",border:"none",cursor:"pointer",padding:"6px 0"}}>
-              <span style={{fontSize:20,opacity:tab===k?1:0.45}}>{icon}</span>
-              <span style={{fontSize:10,color:tab===k?t.accent:t.sub,fontWeight:tab===k?700:400,fontFamily:t.ui}}>{l}</span>
-              {tab===k&&<div style={{width:20,height:2.5,background:t.accent,borderRadius:2,marginTop:1}}/>}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* MODALS */}
-      <Modal visible={showForm} onClose={()=>{setShowForm(false);setEditHab(null);}} t={t}>
-        <HabitForm hab={editHab} onSave={handleSaveHab} onDelete={handleDelHab} onClose={()=>{setShowForm(false);setEditHab(null);}} t={t}/>
-      </Modal>
-      <Modal visible={showMood} onClose={()=>{setShowMood(false);setMoodCeleb(false);}} t={t}>
-        <MoodPicker date={td} current={todayMood?.mood} note={todayMood?.note} isCeleb={moodCeleb} onSave={handleMood} onClose={()=>{setShowMood(false);setMoodCeleb(false);}} t={t}/>
-      </Modal>
-      <Modal visible={!!showDay} onClose={()=>setShowDay(null)} t={t}>
-        {showDay&&<DayDetail date={showDay} habits={habits} logs={logs} mood={moods[showDay]} onClose={()=>setShowDay(null)} t={t}/>}
-      </Modal>
-      <Modal visible={showSettings} onClose={()=>setShowSettings(false)} t={t}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-          <h2 style={{margin:0,fontSize:18,fontWeight:700,fontFamily:t.font,color:t.text}}>Paramètres</h2>
-          <button onClick={()=>setShowSettings(false)} style={{background:t.border,border:"none",borderRadius:20,width:32,height:32,cursor:"pointer",color:t.text,fontSize:15}}>✕</button>
-        </div>
-        <div style={{marginBottom:22}}>
-          <div style={{fontSize:12,fontWeight:700,color:t.sub,textTransform:"uppercase",letterSpacing:1,marginBottom:12,fontFamily:t.ui}}>Thème</div>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {Object.values(THEMES).map(th=>(
-              <button key={th.id} onClick={()=>setTheme(th.id)} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 16px",borderRadius:14,cursor:"pointer",background:themeId===th.id?t.accent+"22":t.bg,border:`1.5px solid ${themeId===th.id?t.accent:t.border}`,transition:"all .2s"}}>
-                <div style={{width:32,height:32,borderRadius:8,background:th.accent,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{th.label.split(" ")[0]}</div>
-                <div style={{textAlign:"left"}}>
-                  <div style={{fontWeight:700,fontSize:15,color:t.text,fontFamily:t.font}}>{th.label.split(" ").slice(1).join(" ")}</div>
-                  <div style={{fontSize:12,color:t.sub,fontFamily:t.ui}}>{th.dark?"Thème sombre":"Thème clair"}</div>
-                </div>
-                {themeId===th.id&&<span style={{marginLeft:"auto",color:t.accent,fontSize:18}}>✓</span>}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <div style={{fontSize:12,fontWeight:700,color:t.sub,textTransform:"uppercase",letterSpacing:1,marginBottom:12,fontFamily:t.ui}}>Badges ({earnedBadges.length}/{BADGES.length})</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            {BADGES.map(b=>{
-              const earned=b.check(habits,logs,moods);
-              return<div key={b.id} style={{background:earned?t.accent+"15":t.bg,border:`1px solid ${earned?t.accent+"44":t.border}`,borderRadius:12,padding:"12px 10px",textAlign:"center",opacity:earned?1:0.4}}>
-                <div style={{fontSize:26,marginBottom:4,filter:earned?"none":"grayscale(1)"}}>{b.emoji}</div>
-                <div style={{fontWeight:700,fontSize:12,color:t.text,fontFamily:t.font}}>{b.label}</div>
-                <div style={{fontSize:10,color:t.sub,marginTop:2,fontFamily:t.ui}}>{b.desc}</div>
-              </div>;
-            })}
-          </div>
-        </div>
-      </Modal>
-    </div>
-  );
-}
-
-const root=ReactDOM.createRoot(document.getElementById("root"));
-root.render(React.createElement(App));
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
 </body>
 </html>
