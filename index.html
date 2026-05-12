@@ -23,11 +23,22 @@
         overscroll-behavior: none;
         margin: 0;
         padding: 0;
+        -webkit-user-select: none;
       }
       * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-      .page{animation:fadeUp .28s ease both}
-      @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+      @keyframes popIn{0%{opacity:0;transform:scale(.9) translateY(10px)}100%{opacity:1;transform:scale(1)}}
+      .page{animation:popIn .3s ease-out both}
       ::-webkit-scrollbar{display:none}
+      
+      .quick-btn {
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #ffffff22;
+        background: #ffffff11;
+        color: white;
+        font-size: 13px;
+        font-weight: 600;
+      }
     </style>
 
     <script src="react.production.min.js"></script>
@@ -38,133 +49,186 @@
 <div id="root"></div>
 
 <script type="text/babel">
-const {useState,useEffect,useCallback,useRef}=React;
+const {useState, useEffect, useRef} = React;
 
-// --- CONFIG & HELPERS ---
-const K={habits:"ht5-habits",logs:"ht5-logs",moods:"ht5-moods",theme:"ht5-theme"};
-const store={
-  get:k=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}},
-  set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}},
+/* ─── CONFIGURATION ─── */
+const K = {habits: "ht5-habits", logs: "ht5-logs", theme: "ht5-theme"};
+const store = {
+  get: k => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { } },
 };
 
-const THEMES={
-  nebula:{id:"nebula",label:"🌌 Nebula",bg:"#0d0d14",card:"#14141f",border:"#22223a",text:"#e8e4ff",sub:"#7070aa",muted:"#3a3a5a",accent:"#9b7cff",dark:true},
-  organic:{id:"organic",label:"🌿 Organic",bg:"#f5f0eb",card:"#fffdf9",border:"#e8e0d5",text:"#2c2416",sub:"#8a7a6a",accent:"#7c9e6e",dark:false},
+const THEMES = {
+  nebula: {id: "nebula", bg: "#0d0d14", card: "#14141f", border: "#22223a", text: "#e8e4ff", sub: "#7070aa", accent: "#9b7cff"},
+  organic: {id: "organic", bg: "#f5f0eb", card: "#fffdf9", border: "#e8e0d5", text: "#2c2416", sub: "#8a7a6a", accent: "#7c9e6e"},
 };
 
-const today=()=>new Date().toISOString().split("T")[0];
-const scheduled=(h,d)=>h.frequency==="daily"?true:true; // Simplifié pour l'exemple
+const today = () => new Date().toISOString().split("T")[0];
 
-/* ─── COMPOSANT CARTE (MODIFIÉ) ─── */
+/* ─── COMPOSANT CARTE HYBRIDE ─── */
 function SwipeCard({hab, pct, onPct, onEdit, t}) {
   const ref = useRef();
   const dragging = useRef(false);
   const startX = useRef(0);
-  const startPct = useRef(0);
-  const hasMovedSignificant = useRef(false);
+  const hasMoved = useRef(false);
+  const [showQuickMenu, setShowQuickMenu] = useState(false);
 
-  const apply = (clientX) => {
+  // Gestion du glissement
+  const apply = clientX => {
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
-    // Calcul de la progression basé sur la position horizontale
-    const relativeX = clientX - rect.left;
-    const newPct = Math.max(0, Math.min(100, Math.round((relativeX / rect.width) * 100 / 5) * 5));
+    const newPct = Math.max(0, Math.min(100, Math.round(((clientX - rect.left) / rect.width) * 100 / 5) * 5));
     onPct(newPct);
   };
 
-  const onPointerDown = (e) => {
+  const onPD = e => {
     dragging.current = true;
     startX.current = e.clientX;
-    startPct.current = pct;
-    hasMovedSignificant.current = false;
+    hasMoved.current = false;
     ref.current?.setPointerCapture(e.pointerId);
   };
 
-  const onPointerMove = (e) => {
+  const onPM = e => {
     if (!dragging.current) return;
-
-    // PROTECTION : On ne modifie rien si le mouvement est inférieur à 15px
-    // Cela évite les changements quand on veut juste scroller verticalement
-    if (!hasMovedSignificant.current) {
-      if (Math.abs(e.clientX - startX.current) > 15) {
-        hasMovedSignificant.current = true;
-      } else {
-        return;
-      }
+    if (!hasMoved.current && Math.abs(e.clientX - startX.current) > 15) {
+      hasMoved.current = true;
+      setShowQuickMenu(false); // Ferme le menu si on glisse
     }
-
-    apply(e.clientX);
+    if (hasMoved.current) apply(e.clientX);
   };
 
-  const onPointerUp = (e) => {
+  const onPU = e => {
     dragging.current = false;
     ref.current?.releasePointerCapture(e.pointerId);
   };
 
+  // Actions au clic (Tap)
+  const toggleComplete = (e) => {
+    e.stopPropagation();
+    onPct(pct === 100 ? 0 : 100);
+  };
+
+  const toggleMenu = (e) => {
+    e.stopPropagation();
+    setShowQuickMenu(!showQuickMenu);
+  };
+
   return (
-    <div 
-      ref={ref} 
-      onPointerDown={onPointerDown} 
-      onPointerMove={onPointerMove} 
-      onPointerUp={onPointerUp}
-      style={{
-        position:"relative",borderRadius:18,overflow:"hidden",background:t.card,
-        border:`1.5px solid ${pct===100?hab.color+"66":t.border}`,
-        cursor:"ew-resize",userSelect:"none",touchAction:"pan-y", // pan-y permet de garder le scroll vertical fluide
-        marginBottom: 10, transition: "border-color 0.3s"
-      }}
-    >
-      <div style={{position:"absolute",inset:0,width:`${pct}%`,background:`linear-gradient(90deg,${hab.color}25,${hab.color}10)`,transition:dragging.current?"none":"width 0.3s"}}/>
-      
-      <div style={{position:"relative",padding:"14px 16px",display:"flex",alignItems:"center",gap:14,pointerEvents:"none"}}>
-        <div style={{width:42,height:42,borderRadius:"50%",border:`3px solid ${pct>0?hab.color:t.muted}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
+    <div style={{marginBottom: 12}}>
+      <div 
+        ref={ref}
+        onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU}
+        style={{
+          position: "relative", borderRadius: 18, overflow: "hidden", background: t.card,
+          border: `1.5px solid ${pct === 100 ? hab.color : t.border}`,
+          cursor: "pointer", touchAction: "pan-y"
+        }}
+      >
+        {/* Barre de progression en fond */}
+        <div style={{
+          position: "absolute", inset: 0, width: `${pct}%`, 
+          background: `${hab.color}${pct === 100 ? '44' : '22'}`, 
+          transition: hasMoved.current ? "none" : "width 0.3s"
+        }}/>
+        
+        <div style={{position: "relative", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12}}>
+          {/* TAP SUR L'ICONE = 0 ou 100% */}
+          <div 
+            onClick={toggleComplete}
+            style={{
+              width: 42, height: 42, borderRadius: "50%", 
+              background: pct === 100 ? hab.color : "transparent",
+              border: `2px solid ${pct === 100 ? hab.color : t.sub}`,
+              display: "flex", alignItems: "center", justifyContent: "center", 
+              fontSize: 18, pointerEvents: "all"
+            }}
+          >
             {pct === 100 ? "✓" : hab.emoji}
-        </div>
-        <div style={{flex:1}}>
-          <div style={{fontWeight:700,fontSize:15,color:t.text}}>{hab.name}</div>
-          <div style={{fontSize:12,color:t.sub,marginTop:3}}>
-            {pct === 100 ? <span style={{color:hab.color}}>Terminé !</span> : pct > 0 ? `${pct}%` : "← Glisse pour avancer"}
           </div>
+
+          {/* TAP SUR LE TEXTE = MENU RAPIDE */}
+          <div onClick={toggleMenu} style={{flex: 1, pointerEvents: "all"}}>
+            <div style={{fontWeight: 700, fontSize: 15, color: t.text}}>{hab.name}</div>
+            <div style={{fontSize: 12, color: t.sub, marginTop: 2}}>
+                {pct === 100 ? <span style={{color: hab.color, fontWeight: 600}}>Terminé</span> : `${pct}%`}
+            </div>
+          </div>
+
+          <button onClick={(e) => {e.stopPropagation(); onEdit();}} style={{background: "none", border: "none", color: t.sub, fontSize: 18, pointerEvents: "all"}}>✎</button>
         </div>
-        <button onClick={(e) => {e.stopPropagation(); onEdit();}} style={{pointerEvents:"all", background:"none", border:"none", color:t.sub, fontSize:16}}>✎</button>
       </div>
+
+      {/* MENU RAPIDE (S'affiche au clic sur le texte) */}
+      {showQuickMenu && (
+        <div style={{
+          display: "flex", justifyContent: "space-between", marginTop: 8, 
+          padding: "0 10px", animation: "popIn 0.2s ease-out"
+        }}>
+          {[0, 25, 50, 75, 100].map(val => (
+            <button 
+              key={val} 
+              onClick={() => { onPct(val); setShowQuickMenu(false); }}
+              style={{
+                background: pct === val ? hab.color : t.card,
+                color: pct === val ? "#fff" : t.text,
+                border: `1px solid ${t.border}`,
+                padding: "6px 10px", borderRadius: 10, fontSize: 12, fontWeight: 600
+              }}
+            >
+              {val}%
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-/* ─── APP PRINCIPALE (SIMPLIFIÉE) ─── */
+/* ─── APP PRINCIPALE ─── */
 function App() {
-  const [habits, setHabits] = useState(store.get(K.habits) || [{id:"1", name:"Sport", emoji:"💪", color:"#9b7cff", frequency:"daily"}]);
+  const [habits, setHabits] = useState(store.get(K.habits) || [{id:"1", name:"Sport", emoji:"💪", color:"#9b7cff"}]);
   const [logs, setLogs] = useState(store.get(K.logs) || {});
-  const t = THEMES.nebula;
+  const [themeId, setThemeId] = useState(store.get(K.theme) || "nebula");
+  const t = THEMES[themeId];
 
   const handlePct = (id, val) => {
-    const newLogs = {...logs, [today()]: {...logs[today()], [id]: val}};
+    const newLogs = {...logs, [today()]: {...(logs[today()] || {}), [id]: val}};
     setLogs(newLogs);
     store.set(K.logs, newLogs);
   };
 
   return (
-    <div style={{background:t.bg, minHeight:"100vh", padding:20, color:t.text}}>
-      <h1 style={{fontSize:22, marginBottom:20}}>Mes Habitudes</h1>
+    <div style={{background: t.bg, minHeight: "100vh", color: t.text, padding: 20}}>
+      <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 25}}>
+        <h1 style={{fontSize: 24, margin: 0}}>Mes Habitudes</h1>
+        <button 
+            onClick={() => setThemeId(themeId === "nebula" ? "organic" : "nebula")}
+            style={{background: t.card, border: "none", color: t.text, padding: "8px 12px", borderRadius: 12}}
+        >
+          {themeId === "nebula" ? "🌿" : "🌌"}
+        </button>
+      </div>
+
       {habits.map(h => (
         <SwipeCard 
           key={h.id} 
           hab={h} 
           pct={logs[today()]?.[h.id] || 0} 
           onPct={(v) => handlePct(h.id, v)} 
-          onEdit={() => alert('Edition')} 
+          onEdit={() => alert('Option edition')} 
           t={t} 
         />
       ))}
-      <p style={{fontSize:12, color:t.sub, textAlign:"center", marginTop:20}}>
-        Le réglage est désormais moins sensible aux frôlements.
+      
+      <p style={{textAlign: "center", fontSize: 12, color: t.sub, marginTop: 40}}>
+        Astuce : Appuyez sur l'icône pour terminer,<br/>ou sur le nom pour choisir la progression.
       </p>
     </div>
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
 </script>
 </body>
 </html>
