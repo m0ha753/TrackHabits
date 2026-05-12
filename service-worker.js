@@ -1,34 +1,38 @@
-const CACHE_NAME = 'trackhabits-v1';
-const ASSETS = [
-  './',
-  './index.html',
-  './manifest.json',
-  './react.production.min.js',
-  './react-dom.production.min.js',
-  './babel.min.js',
+var CACHE_NAME = "trackhabits-v1";
+var ASSETS = [
+  "./",
+  "./index.html",
+  "./manifest.json",
+  "./react.production.min.js",
+  "./react-dom.production.min.js",
+  "./babel.min.js"
 ];
 
-// Installation : mise en cache de tous les fichiers
-self.addEventListener('install', e => {
+self.addEventListener("install", function(e) {
   e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then(function(cache) {
+      return cache.addAll(ASSETS);
+    })
   );
   self.skipWaiting();
 });
 
-// Activation : suppression des anciens caches
-self.addEventListener('activate', e => {
+self.addEventListener("activate", function(e) {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    )
+    caches.keys().then(function(keys) {
+      return Promise.all(
+        keys.filter(function(k) { return k !== CACHE_NAME; })
+            .map(function(k) { return caches.delete(k); })
+      );
+    })
   );
   self.clients.claim();
 });
 
-// Fetch : cache en priorité, réseau en fallback
-self.addEventListener('fetch', e => {
+self.addEventListener("fetch", function(e) {
   e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request))
+    caches.match(e.request).then(function(cached) {
+      return cached || fetch(e.request);
+    })
   );
 });
