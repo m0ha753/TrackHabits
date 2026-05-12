@@ -1,0 +1,19 @@
+{
+  "short_name": "TrackHabits",
+  "name": "TrackHabits - Suivi Quotidien",
+  "description": "Une application simple pour suivre ses habitudes au quotidien, même hors-ligne.",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1067/1067555.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "./TrackHabits.html",
+  "background_color": "#0d0d14",
+  "display": "standalone",
+  "scope": "./",
+  "theme_color": "#9b7cff",
+  "orientation": "portrait"
+}
