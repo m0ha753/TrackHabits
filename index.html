@@ -36,14 +36,8 @@
       input,select,textarea{-webkit-appearance:none}
       ::-webkit-scrollbar{display:none}
 
-      /* Glissade vers le bas au moment de la complétion */
-      .habit-item {
-        transition: transform 0.42s cubic-bezier(.4,0,.2,1), opacity 0.42s ease;
-      }
-      .habit-item-completing {
-        transform: translateY(10px);
-        opacity: 0.45;
-      }
+      /* Les cartes sont positionnées normalement, le FLIP gère les animations */
+      .habit-item { will-change: transform; }
     </style>
 
     <script src="react.production.min.js"></script>
@@ -517,31 +511,33 @@ function WeekView({habits,logs,moods,onEdit,onToggle,t}){
   );
 }
 
-/* ─── SORTED HABIT LIST ──────────────────────────────────────────────────────
-   Ordre d'affichage :
-     • Non terminées en haut, dans l'ordre d'ajout (createdAt ou id)
-     • Terminées en bas, dans l'ordre d'ajout
-   Le re-tri ne se déclenche qu'au COMMIT (relâchement slide ou tap emoji),
-   avec une animation de glissade vers le bas pour la tâche qui vient d'être complétée.
+/* ─── SORTED HABIT LIST (FLIP animation) ────────────────────────────────────
+   Technique FLIP :
+     F = on snapshot les positions AVANT le re-tri (getBoundingClientRect)
+     L = on applique le nouvel ordre (React re-render)
+     I = on mesure les positions APRÈS, on calcule le delta, on positionne les
+         éléments à leur ancienne place (translateY inverse)
+     P = on retire le transform → le browser anime vers 0 avec une transition CSS
 ─── */
 function SortedHabitList({habits, localProg, onPct, onCommit, onEdit, t}){
-  /* On garde l'ordre d'ajout stable comme référence */
   const addOrder=useRef(habits.map(h=>h.id));
 
-  /* orderedIds : ordre actuellement affiché */
   const[orderedIds, setOrderedIds]=useState(()=>{
     const done=habits.filter(h=>(localProg[h.id]||0)>=100).map(h=>h.id);
     const notDone=habits.filter(h=>(localProg[h.id]||0)<100).map(h=>h.id);
     return [...notDone,...done];
   });
 
-  /* IDs en cours d'animation glissade */
-  const[completingIds, setCompletingIds]=useState(new Set());
+  /* ref du conteneur + refs individuelles par carte */
+  const containerRef=useRef();
+  const cardRefs=useRef({});   /* id → DOM node */
 
-  /* Sync quand habitudes ajoutées/supprimées */
+  /* Snapshot des positions avant re-tri */
+  const snapshotRef=useRef({});
+
+  /* Sync ajouts/suppressions */
   useEffect(()=>{
     const currentIds=new Set(habits.map(h=>h.id));
-    /* Nouvelles habitudes → on les ajoute en tête de groupe non-terminé */
     const newHabs=habits.filter(h=>!addOrder.current.includes(h.id));
     if(newHabs.length){
       newHabs.forEach(h=>addOrder.current.push(h.id));
@@ -553,29 +549,59 @@ function SortedHabitList({habits, localProg, onPct, onCommit, onEdit, t}){
         return [...newIds,...notDone,...done];
       });
     }
-    /* Suppressions */
     setOrderedIds(prev=>prev.filter(id=>currentIds.has(id)));
   },[habits]);
 
   const habMap=Object.fromEntries(habits.map(h=>[h.id,h]));
 
-  const handleCommit=useCallback((habId, pct)=>{
-    onCommit(habId, pct);
+  /* Lance l'animation FLIP pour un re-tri donné */
+  const flipAndSort=useCallback((nextOrderFn)=>{
+    /* F — snapshot positions actuelles */
+    const before={};
+    Object.entries(cardRefs.current).forEach(([id,el])=>{
+      if(el)before[id]=el.getBoundingClientRect().top;
+    });
+    snapshotRef.current=before;
+
+    /* L — applique le nouvel ordre */
+    setOrderedIds(prev=>{
+      const next=nextOrderFn(prev);
+      /* I+P — après que React a rendu le nouvel ordre */
+      requestAnimationFrame(()=>{
+        requestAnimationFrame(()=>{
+          Object.entries(cardRefs.current).forEach(([id,el])=>{
+            if(!el||before[id]==null)return;
+            const after=el.getBoundingClientRect().top;
+            const delta=before[id]-after;   /* déplacement inverse */
+            if(Math.abs(delta)<1)return;     /* rien à animer */
+            /* Positionne l'élément à son ancienne place sans transition */
+            el.style.transition="none";
+            el.style.transform=`translateY(${delta}px)`;
+            /* Force reflow puis anime vers 0 */
+            el.getBoundingClientRect();
+            el.style.transition="transform 0.48s cubic-bezier(0.4,0,0.2,1)";
+            el.style.transform="translateY(0)";
+            /* Nettoie après l'animation */
+            const onEnd=()=>{el.style.transition="";el.style.transform="";el.removeEventListener("transitionend",onEnd);};
+            el.addEventListener("transitionend",onEnd);
+          });
+        });
+      });
+      return next;
+    });
+  },[]);
+
+  const handleCommit=useCallback((habId,pct)=>{
+    onCommit(habId,pct);
 
     if(pct>=100){
-      /* 1. Anime la glissade */
-      setCompletingIds(prev=>new Set([...prev,habId]));
-      /* 2. Après l'animation : re-trie */
-      setTimeout(()=>{
-        setOrderedIds(prev=>{
-          const notDone=prev.filter(id=>id!==habId&&(localProg[id]||0)<100);
-          const done=prev.filter(id=>id===habId||(localProg[id]||0)>=100);
-          return [...notDone,...done];
-        });
-        setCompletingIds(prev=>{const s=new Set(prev);s.delete(habId);return s;});
-      },430);
+      flipAndSort(prev=>{
+        const notDone=prev.filter(id=>id!==habId&&(localProg[id]||0)<100);
+        const done=prev.filter(id=>id===habId||(localProg[id]||0)>=100);
+        return [...notDone,...done];
+      });
     } else {
-      /* Décochée → remonte immédiatement en tête du groupe non-terminé */
+      /* Décoché → remonte en tête sans animation (instantané, naturel) */
       setOrderedIds(prev=>{
         const rest=prev.filter(id=>id!==habId);
         const done=rest.filter(id=>(localProg[id]||0)>=100);
@@ -583,26 +609,26 @@ function SortedHabitList({habits, localProg, onPct, onCommit, onEdit, t}){
         return [habId,...notDone,...done];
       });
     }
-  },[onCommit, localProg]);
+  },[onCommit,localProg,flipAndSort]);
 
   const visible=orderedIds.filter(id=>habMap[id]);
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+    <div ref={containerRef} style={{display:"flex",flexDirection:"column",gap:10}}>
       {visible.map(id=>{
         const h=habMap[id];
         const pct=localProg[h.id]||0;
         return(
-          <SwipeCard
-            key={h.id}
-            hab={h}
-            pct={pct}
-            onPct={p=>onPct(h.id,p)}
-            onCommit={p=>handleCommit(h.id,p)}
-            onEdit={()=>onEdit(h)}
-            t={t}
-            completing={completingIds.has(h.id)}
-          />
+          <div key={h.id} ref={el=>{ if(el)cardRefs.current[h.id]=el; else delete cardRefs.current[h.id]; }} className="habit-item">
+            <SwipeCard
+              hab={h}
+              pct={pct}
+              onPct={p=>onPct(h.id,p)}
+              onCommit={p=>handleCommit(h.id,p)}
+              onEdit={()=>onEdit(h)}
+              t={t}
+            />
+          </div>
         );
       })}
     </div>
