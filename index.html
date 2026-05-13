@@ -1,83 +1,108 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8"/>
-    <title>TrackHabits</title>
-    <link rel="manifest" href="manifest.json">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta id="theme-color-meta" name="theme-color" content="#0d0d14">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <meta name="apple-mobile-web-app-title" content="Habitudes">
-
-    <script>
+  <meta charset="UTF-8"/>
+  <title>TrackHabits</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta id="theme-color-meta" name="theme-color" content="#0d0d14">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="apple-mobile-web-app-title" content="Habitudes">
+  <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./service-worker.js')
-          .then(reg => console.log('Service Worker enregistré !'))
-          .catch(err => console.log('Erreur SW:', err));
+          .then(() => console.log('SW ok')).catch(e => console.log('SW err', e));
       });
     }
-    </script>
-
-    <style>
-      @font-face { font-family: 'FallbackFont'; src: local('Arial'); }
-      body {
-        font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-        overscroll-behavior: none;
-        margin: 0; padding: 0;
-      }
-      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-      @keyframes toastPop{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-      @keyframes popIn{0%{opacity:0;transform:scale(.6) translateY(14px)}65%{transform:scale(1.07)}100%{opacity:1;transform:scale(1)}}
-      @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-      .habit-new{animation:popIn .55s cubic-bezier(.34,1.56,.64,1) both}
-      .page{animation:fadeUp .28s ease both}
-      input,select,textarea{-webkit-appearance:none}
-      ::-webkit-scrollbar{display:none}
-
-      /* Les cartes sont positionnées normalement, le FLIP gère les animations */
-      .habit-item { will-change: transform; }
-    </style>
-
-    <script src="react.production.min.js"></script>
-    <script src="react-dom.production.min.js"></script>
-    <script src="babel.min.js"></script>
+  </script>
+  <style>
+    body { font-family: 'DM Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif!important; overscroll-behavior:none; margin:0; padding:0; }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    ::-webkit-scrollbar { display:none; }
+    @keyframes toastPop { from{opacity:0;transform:translateX(-50%) translateY(-10px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
+    @keyframes popIn { 0%{opacity:0;transform:scale(.6) translateY(14px)} 65%{transform:scale(1.07)} 100%{opacity:1;transform:scale(1)} }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes floatBlob { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(40px,-30px) scale(1.08)} 66%{transform:translate(-20px,40px) scale(0.95)} }
+    @keyframes floatBlob2 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(-50px,30px) scale(1.05)} 66%{transform:translate(30px,-40px) scale(0.97)} }
+    @keyframes floatBlob3 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(20px,50px) scale(1.1)} }
+    .habit-new { animation:popIn .55s cubic-bezier(.34,1.56,.64,1) both }
+    .page { animation:fadeUp .28s ease both }
+    input,select,textarea { -webkit-appearance:none; }
+    .glass-card {
+      background: rgba(255,255,255,0.07);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .glass-card-light {
+      background: rgba(255,255,255,0.55);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.7);
+    }
+    .blob {
+      position:fixed; border-radius:50%; filter:blur(80px);
+      pointer-events:none; z-index:0; opacity:0.55;
+    }
+    .blob1 { width:340px; height:340px; top:-60px; left:-80px; animation:floatBlob 18s ease-in-out infinite; }
+    .blob2 { width:280px; height:280px; bottom:80px; right:-60px; animation:floatBlob2 22s ease-in-out infinite; }
+    .blob3 { width:220px; height:220px; top:45%; left:30%; animation:floatBlob3 26s ease-in-out infinite; }
+    .app-root { position:relative; z-index:1; }
+  </style>
+  <script src="react.production.min.js"></script>
+  <script src="react-dom.production.min.js"></script>
+  <script src="babel.min.js"></script>
 </head>
 <body>
 <div id="root"></div>
-
 <script type="text/babel">
-const {useState,useEffect,useCallback,useRef}=React;
+const {useState,useEffect,useCallback,useRef,useMemo}=React;
 
 /* ─── STORAGE ─── */
-const K={habits:"ht5-habits",logs:"ht5-logs",moods:"ht5-moods",theme:"ht5-theme"};
+const K={habits:"ht6-habits",logs:"ht6-logs",moods:"ht6-moods",crystals:"ht6-crystals",masterStreak:"ht6-ms",perfectDays:"ht6-pd",lastCheck:"ht6-lc",zenMode:"ht6-zen"};
 const store={
   get:k=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}},
   set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}},
 };
 
-/* ─── THEMES ─── */
-const THEMES={
-  nebula:{id:"nebula",label:"🌌 Nebula",bg:"#0d0d14",card:"#14141f",border:"#22223a",text:"#e8e4ff",sub:"#7070aa",muted:"#3a3a5a",accent:"#9b7cff",tab:"#14141f",tabBorder:"#22223a",header:"#14141f",font:"'Space Grotesk',sans-serif",ui:"'Space Grotesk',sans-serif",dark:true},
-  neon:{id:"neon",label:"⚡ Neon",bg:"#0a0a0a",card:"#111111",border:"#1f1f1f",text:"#f0f0f0",sub:"#666666",muted:"#333333",accent:"#00ff88",tab:"#111111",tabBorder:"#1f1f1f",header:"#111111",font:"'Syne',sans-serif",ui:"'Syne',sans-serif",dark:true},
-  organic:{id:"organic",label:"🌿 Organic",bg:"#f5f0eb",card:"#fffdf9",border:"#e8e0d5",text:"#2c2416",sub:"#8a7a6a",muted:"#b5a898",accent:"#7c9e6e",tab:"#fffdf9",tabBorder:"#e8e0d5",header:"#fffdf9",font:"'Fraunces',serif",ui:"'DM Sans',sans-serif",dark:false},
+/* ─── SAISONS & THÈMES ─── */
+function getSeason(month){
+  if(month<=1||month===11) return "winter";
+  if(month<=4) return "spring";
+  if(month<=7) return "summer";
+  return "autumn";
+}
+const SEASONS={
+  winter:{bg:"#0a0f1e",blob1:"#1a3a6e",blob2:"#0d2550",blob3:"#163060",accent:"#60a5fa",accentHex:"#60a5fa",label:"Hiver ❄️"},
+  spring:{bg:"#0d1a0f",blob1:"#1a4a1e",blob2:"#0d3315",blob3:"#16431a",accent:"#4ade80",accentHex:"#4ade80",label:"Printemps 🌸"},
+  summer:{bg:"#1a0d00",blob1:"#4a2000",blob2:"#3a1500",blob3:"#5a2800",accent:"#fb923c",accentHex:"#fb923c",label:"Été ☀️"},
+  autumn:{bg:"#1a0f00",blob1:"#4a2a00",blob2:"#3a1a00",blob3:"#5a3000",accent:"#f59e0b",accentHex:"#f59e0b",label:"Automne 🍂"},
 };
-function syncThemeColor(bg){const m=document.getElementById("theme-color-meta");if(m)m.setAttribute("content",bg);}
+const month=new Date().getMonth();
+const SEASON=SEASONS[getSeason(month)];
 
-const HABIT_COLORS=["#f472b6","#a78bfa","#60a5fa","#34d399","#facc15","#fb923c","#f87171","#22d3ee"];
+const T={
+  bg:SEASON.bg,
+  card:"rgba(255,255,255,0.07)",
+  border:"rgba(255,255,255,0.12)",
+  text:"#f0eeff",
+  sub:"rgba(240,238,255,0.5)",
+  muted:"rgba(240,238,255,0.15)",
+  accent:SEASON.accentHex,
+  font:"'DM Sans',sans-serif",
+  ui:"'DM Sans',sans-serif",
+  dark:true,
+};
+
+/* ─── CONSTANTS ─── */
+const EMERALD="#10b981";
+const EMERALD_GLOW="rgba(16,185,129,0.4)";
 const MOODS=[{emoji:"😔",label:"Difficile",color:"#f87171"},{emoji:"😐",label:"Moyen",color:"#fb923c"},{emoji:"🙂",label:"Bien",color:"#facc15"},{emoji:"😊",label:"Super",color:"#4ade80"},{emoji:"🤩",label:"Incroyable",color:"#f472b6"}];
-const UNITS=["L","ml","h","min","km","m","fois","pages","kcal","€",""];
 const DAYS_FR=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
 const MONTHS_FULL=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
-const BADGES=[
-  {id:"first",emoji:"🌱",label:"Première",desc:"Créer ta 1ère habitude",check:(h)=>h.length>=1},
-  {id:"w7",emoji:"🔥",label:"Semaine feu",desc:"7j consécutifs",check:(h,l)=>h.some(x=>streak(x,l)>=7)},
-  {id:"m30",emoji:"💎",label:"Diamant",desc:"30j consécutifs",check:(h,l)=>h.some(x=>streak(x,l)>=30)},
-  {id:"perf",emoji:"⭐",label:"Parfait",desc:"Semaine 100%",check:(h,l)=>checkPerfect(h,l)},
-  {id:"mood30",emoji:"🧘",label:"Équilibre",desc:"30 humeurs enregistrées",check:(_,__,m)=>Object.keys(m).length>=30},
-  {id:"all5",emoji:"🏆",label:"Champion",desc:"5 habitudes actives",check:(h)=>h.length>=5},
-];
+const UNITS=["L","ml","h","min","km","m","fois","pages","kcal","€",""];
 
 /* ─── HELPERS ─── */
 const today=()=>new Date().toISOString().split("T")[0];
@@ -85,18 +110,24 @@ const dow=d=>(new Date(d+"T12:00:00").getDay()+6)%7;
 const shift=(d,n)=>{const x=new Date(d+"T12:00:00");x.setDate(x.getDate()+n);return x.toISOString().split("T")[0];};
 const lastN=n=>Array.from({length:n},(_,i)=>shift(today(),-(n-1-i)));
 const scheduled=(h,d)=>h.frequency==="daily"?true:h.frequency==="weekly"?(h.days||[]).includes(dow(d)):true;
-const scoreColor=p=>p>=80?"#4ade80":p>=45?"#facc15":"#f87171";
 
 function streak(hab,logs){
   let s=0;
   for(let i=0;i<365;i++){const d=shift(today(),-i);if(!scheduled(hab,d))continue;if((logs[d]?.[hab.id]||0)>=100)s++;else break;}
   return s;
 }
-function checkPerfect(habits,logs){
-  return lastN(7).every(d=>{const sc=habits.filter(h=>scheduled(h,d));return sc.length>0&&sc.every(h=>(logs[d]?.[h.id]||0)>=100);});
-}
+
 const dayScore=(habits,logs,d)=>{const sc=habits.filter(h=>scheduled(h,d));if(!sc.length)return null;return Math.round(sc.reduce((a,h)=>a+(logs[d]?.[h.id]||0),0)/sc.length);};
 const fmtProgress=(hab,pct)=>{if(!hab.goalQty||hab.goalUnit===undefined)return null;const cur=Math.round((pct/100)*hab.goalQty*10)/10;return`${cur}${hab.goalUnit} / ${hab.goalQty}${hab.goalUnit}`;};
+
+const UNIT_INTEGER=["fois","pages","h","min","ml","m","kcal"];
+function snapPct(rawPct,hab){
+  if(!hab.goalQty)return rawPct>=50?100:0;
+  const u=hab.goalUnit,qty=hab.goalQty;
+  if(UNIT_INTEGER.includes(u)){const step=100/qty;return Math.max(0,Math.min(100,Math.round(rawPct/step)*step));}
+  const step=10/qty;
+  return Math.max(0,Math.min(100,Math.round(rawPct/step)*step));
+}
 
 /* ─── CONFETTI ─── */
 function Confetti({onDone}){
@@ -104,14 +135,9 @@ function Confetti({onDone}){
   useEffect(()=>{
     const c=ref.current;if(!c)return;
     const ctx=c.getContext("2d");c.width=window.innerWidth;c.height=window.innerHeight;
-    const pieces=Array.from({length:120},()=>({x:Math.random()*c.width,y:-10-Math.random()*200,vx:(Math.random()-.5)*5,vy:3+Math.random()*5,r:4+Math.random()*6,color:["#f472b6","#a78bfa","#facc15","#4ade80","#60a5fa","#fb923c"][Math.floor(Math.random()*6)],rot:Math.random()*360,vrot:(Math.random()-.5)*8}));
+    const pieces=Array.from({length:120},()=>({x:Math.random()*c.width,y:-10-Math.random()*200,vx:(Math.random()-.5)*5,vy:3+Math.random()*5,r:4+Math.random()*6,color:[EMERALD,"#a78bfa","#facc15","#60a5fa","#fb923c"][Math.floor(Math.random()*5)],rot:Math.random()*360,vrot:(Math.random()-.5)*8}));
     let frame=0,raf;
-    const draw=()=>{
-      ctx.clearRect(0,0,c.width,c.height);
-      pieces.forEach(p=>{ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot*Math.PI/180);ctx.fillStyle=p.color;ctx.globalAlpha=Math.max(0,1-frame/80);ctx.fillRect(-p.r/2,-p.r/2,p.r,p.r*1.4);ctx.restore();p.x+=p.vx;p.y+=p.vy;p.rot+=p.vrot;p.vy+=0.08;});
-      frame++;
-      if(frame<100)raf=requestAnimationFrame(draw);else onDone();
-    };
+    const draw=()=>{ctx.clearRect(0,0,c.width,c.height);pieces.forEach(p=>{ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot*Math.PI/180);ctx.fillStyle=p.color;ctx.globalAlpha=Math.max(0,1-frame/80);ctx.fillRect(-p.r/2,-p.r/2,p.r,p.r*1.4);ctx.restore();p.x+=p.vx;p.y+=p.vy;p.rot+=p.vrot;p.vy+=0.08;});frame++;if(frame<100)raf=requestAnimationFrame(draw);else onDone();};
     raf=requestAnimationFrame(draw);
     return()=>cancelAnimationFrame(raf);
   },[]);
@@ -119,30 +145,32 @@ function Confetti({onDone}){
 }
 
 /* ─── RING ─── */
-function Ring({pct=0,color,size=48,stroke=4,t,hideText=false}){
-  const tc=t||THEMES.nebula,r=(size-stroke*2)/2,c=2*Math.PI*r;
+function Ring({pct=0,color,size=48,stroke=4,hideText=false,glow=false}){
+  const frostedColor=pct>=100?EMERALD:"rgba(255,255,255,0.35)";
+  const activeColor=pct>=100?EMERALD:(pct>0?color||"rgba(255,255,255,0.7)":"transparent");
+  const r=(size-stroke*2)/2,c=2*Math.PI*r;
   return(
     <div style={{position:"relative",width:size,height:size,flexShrink:0}}>
       <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={tc.muted} strokeWidth={stroke}/>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeDasharray={`${(pct/100)*c} ${c}`} strokeLinecap="round" style={{transition:"stroke-dasharray .4s ease"}}/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={stroke}/>
+        {pct>0&&<circle cx={size/2} cy={size/2} r={r} fill="none" stroke={activeColor} strokeWidth={stroke} strokeDasharray={`${(pct/100)*c} ${c}`} strokeLinecap="round" style={{transition:"stroke-dasharray .4s ease",filter:pct>=100&&glow?`drop-shadow(0 0 6px ${EMERALD_GLOW})`:"none"}}/>}
       </svg>
       {!hideText&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-        {pct>0&&pct<100&&<span style={{fontSize:size*0.22,fontWeight:700,color,fontFamily:"monospace"}}>{pct}</span>}
+        {pct>0&&pct<100&&<span style={{fontSize:size*0.22,fontWeight:700,color:"rgba(255,255,255,0.8)",fontFamily:"monospace"}}>{Math.round(pct)}</span>}
       </div>}
     </div>
   );
 }
 
 /* ─── MODAL ─── */
-function Modal({visible,onClose,t,children}){
+function Modal({visible,onClose,children}){
   const[render,setRender]=useState(visible);
   const[anim,setAnim]=useState(visible?"in":"out");
   useEffect(()=>{if(visible){setRender(true);setTimeout(()=>setAnim("in"),10);}else{setAnim("out");setTimeout(()=>setRender(false),340);}},[ visible]);
   if(!render)return null;
   return(
-    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"#00000099",zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center",opacity:anim==="in"?1:0,transition:"opacity .3s"}}>
-      <div style={{background:t.card,borderRadius:"24px 24px 0 0",padding:"22px 20px 48px",width:"100%",maxWidth:520,maxHeight:"92vh",overflowY:"auto",borderTop:`1px solid ${t.border}`,transform:anim==="in"?"translateY(0)":"translateY(100%)",transition:"transform .34s cubic-bezier(.34,1.15,.64,1)",color:t.text,fontFamily:t.ui}}>
+    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(6px)",zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center",opacity:anim==="in"?1:0,transition:"opacity .3s"}}>
+      <div className="glass-card" style={{borderRadius:"24px 24px 0 0",padding:"22px 20px 48px",width:"100%",maxWidth:520,maxHeight:"92vh",overflowY:"auto",transform:anim==="in"?"translateY(0)":"translateY(100%)",transition:"transform .34s cubic-bezier(.34,1.15,.64,1)",color:T.text,fontFamily:T.ui}}>
         {children}
       </div>
     </div>
@@ -151,30 +179,64 @@ function Modal({visible,onClose,t,children}){
 
 /* ─── TOAST ─── */
 function Toast({msg,color}){
-  return <div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:color,color:"#fff",padding:"10px 22px",borderRadius:30,fontWeight:700,fontSize:14,zIndex:9999,whiteSpace:"nowrap",boxShadow:"0 4px 20px #0004",animation:"toastPop .35s cubic-bezier(.34,1.56,.64,1)"}}>{msg}</div>;
+  return <div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:color,color:"#fff",padding:"10px 22px",borderRadius:30,fontWeight:700,fontSize:14,zIndex:9999,whiteSpace:"nowrap",boxShadow:"0 4px 20px rgba(0,0,0,0.4)",animation:"toastPop .35s cubic-bezier(.34,1.56,.64,1)"}}>{msg}</div>;
 }
 
-/* ─── SNAP ──────────────────────────────────────────────────────────────────
-   Sans objectif mesurable (goalQty falsy) → snap BINAIRE : < 50% = 0, ≥ 50% = 100
-   Avec objectif mesurable → snap sur les unités (comportement original)
-─── */
-const UNIT_INTEGER=["fois","pages","h","min","ml","m","kcal"];
+/* ─── MASTER STREAK HEADER ─── */
+function MasterStreakBar({masterStreak,crystals,perfectDays}){
+  const progress=perfectDays%7;
+  const barW=`${(progress/7)*100}%`;
+  return(
+    <div style={{marginTop:10,marginBottom:2}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <span style={{fontSize:16}}>🔥</span>
+          <span style={{fontSize:13,fontWeight:700,color:T.text}}>{masterStreak} jour{masterStreak>1?"s":""} parfait{masterStreak>1?"s":""}</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:5}}>
+          {Array.from({length:Math.min(crystals,5)}).map((_,i)=><span key={i} style={{fontSize:14}}>💎</span>)}
+          {crystals>5&&<span style={{fontSize:11,color:T.sub}}>×{crystals}</span>}
+          {crystals===0&&<span style={{fontSize:11,color:T.sub}}>0 cristal</span>}
+        </div>
+      </div>
+      <div style={{background:"rgba(255,255,255,0.1)",borderRadius:6,height:5,overflow:"hidden",position:"relative"}}>
+        <div style={{position:"absolute",left:0,top:0,height:"100%",width:barW,background:`linear-gradient(90deg,${T.accent},${EMERALD})`,borderRadius:6,transition:"width .5s ease"}}/>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:3}}>
+        <span style={{fontSize:10,color:T.sub}}>{progress}/7 journées parfaites → 💎</span>
+        <span style={{fontSize:10,color:T.sub}}>{7-progress} restante{7-progress>1?"s":""}</span>
+      </div>
+    </div>
+  );
+}
 
-function snapPct(rawPct, hab){
-  /* Pas d'objectif → on passe de 0 à 100 en une seule fois */
-  if(!hab.goalQty) return rawPct >= 50 ? 100 : 0;
-
-  const u=hab.goalUnit, qty=hab.goalQty;
-  if(UNIT_INTEGER.includes(u)){
-    const step=100/qty;
-    return Math.max(0,Math.min(100,Math.round(rawPct/step)*step));
-  }
-  const step=10/qty;
-  return Math.max(0,Math.min(100,Math.round(rawPct/step)*step));
+/* ─── MODE ZEN ─── */
+function ZenMode({habits,localProg,onPct,onCommit}){
+  const n=habits.length;
+  const ringSize=n<=2?110:n<=4?88:n<=6?70:n<=9?58:n<=12?48:40;
+  const cols=n<=2?2:n<=4?2:3;
+  return(
+    <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:12,padding:"12px 0",justifyItems:"center"}}>
+      {habits.map(h=>{
+        const pct=localProg[h.id]||0;
+        const handleTap=()=>{const next=pct>=100?0:100;onPct(h.id,next);onCommit(h.id,next);};
+        return(
+          <div key={h.id} onClick={handleTap} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,cursor:"pointer",userSelect:"none"}}>
+            <div style={{position:"relative",width:ringSize,height:ringSize}}>
+              <Ring pct={pct} size={ringSize} stroke={ringSize>70?5:4} glow={pct>=100} hideText/>
+              <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:ringSize*0.35,filter:pct>=100?"drop-shadow(0 0 6px rgba(16,185,129,0.8))":"none"}}>{pct>=100?"✓":h.emoji}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 /* ─── SWIPE CARD ─── */
-function SwipeCard({hab, pct, onPct, onCommit, onEdit, t, completing}){
+function SwipeCard({hab,pct,onPct,onCommit,onEdit}){
   const ref=useRef();
   const dragging=useRef(false);
   const startX=useRef(0);
@@ -182,93 +244,43 @@ function SwipeCard({hab, pct, onPct, onCommit, onEdit, t, completing}){
   const pendingPct=useRef(pct);
 
   const applyX=clientX=>{
-    const rect=ref.current?.getBoundingClientRect();
-    if(!rect)return;
+    const rect=ref.current?.getBoundingClientRect();if(!rect)return;
     const raw=Math.max(0,Math.min(100,((clientX-rect.left)/rect.width)*100));
     const snapped=Math.round(snapPct(raw,hab)*10)/10;
-    pendingPct.current=snapped;
-    onPct(snapped);
+    pendingPct.current=snapped;onPct(snapped);
   };
-
-  const onPD=e=>{
-    if(e.target.closest("[data-ctrl]"))return;
-    startX.current=e.clientX;
-    startY.current=e.clientY;
-    dragging.current=false;
-    pendingPct.current=pct;
-  };
-  const onPM=e=>{
-    const dx=Math.abs(e.clientX-startX.current);
-    const dy=Math.abs(e.clientY-startY.current);
-    if(!dragging.current){
-      if(dy>10&&dy>dx)return;
-      if(dx>10){dragging.current=true;ref.current?.setPointerCapture(e.pointerId);}
-    }
-    if(dragging.current)applyX(e.clientX);
-  };
-  /* Commit au relâchement → déclenche le tri */
-  const onPU=e=>{
-    if(dragging.current)applyX(e.clientX);
-    dragging.current=false;
-    onCommit(pendingPct.current);
-  };
-
-  /* Tap emoji/ring → toggle 0/100 et commit immédiatement */
-  const onEmojiClick=e=>{
-    e.stopPropagation();
-    const next=pct>=100?0:100;
-    onPct(next);
-    onCommit(next);
-  };
+  const onPD=e=>{if(e.target.closest("[data-ctrl]"))return;startX.current=e.clientX;startY.current=e.clientY;dragging.current=false;pendingPct.current=pct;};
+  const onPM=e=>{const dx=Math.abs(e.clientX-startX.current),dy=Math.abs(e.clientY-startY.current);if(!dragging.current){if(dy>10&&dy>dx)return;if(dx>10){dragging.current=true;ref.current?.setPointerCapture(e.pointerId);}}if(dragging.current)applyX(e.clientX);};
+  const onPU=e=>{if(dragging.current)applyX(e.clientX);dragging.current=false;onCommit(pendingPct.current);};
+  const onEmojiClick=e=>{e.stopPropagation();const next=pct>=100?0:100;onPct(next);onCommit(next);};
 
   const prog=fmtProgress(hab,pct);
   const s=streak(hab,{});
+  const done=pct>=100;
+  const cardBorder=done?`1px solid rgba(16,185,129,0.5)`:pct>0?`1px solid rgba(255,255,255,0.2)`:`1px solid rgba(255,255,255,0.08)`;
+  const cardBg=done?"rgba(16,185,129,0.08)":"rgba(255,255,255,0.06)";
 
   return(
-    <div
-      ref={ref}
-      onPointerDown={onPD}
-      onPointerMove={onPM}
-      onPointerUp={onPU}
-      className={`habit-item${completing?" habit-item-completing":""}`}
-      style={{
-        position:"relative",
-        borderRadius:18,
-        overflow:"hidden",
-        background:t.card,
-        border:`1.5px solid ${pct===100?hab.color+"66":pct>0?hab.color+"33":t.border}`,
-        cursor:"ew-resize",
-        userSelect:"none",
-        touchAction:"pan-y",
-        boxShadow:pct===100?`0 2px 20px ${hab.color}22`:"none",
-      }}>
-      <div style={{position:"absolute",inset:0,width:`${pct}%`,background:`linear-gradient(90deg,${hab.color}25,${hab.color}10)`,transition:"width .15s",pointerEvents:"none"}}/>
+    <div ref={ref} onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU}
+      style={{position:"relative",borderRadius:16,overflow:"hidden",background:cardBg,backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",border:cardBorder,cursor:"ew-resize",userSelect:"none",touchAction:"pan-y",boxShadow:done?`0 0 20px rgba(16,185,129,0.15)`:"none",transition:"box-shadow .3s,border .3s"}}>
+      <div style={{position:"absolute",inset:0,width:`${pct}%`,background:`linear-gradient(90deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))`,transition:"width .15s",pointerEvents:"none"}}/>
       <div style={{position:"relative",padding:"14px 16px",display:"flex",alignItems:"center",gap:14}}>
         <div data-ctrl="1" onPointerDown={e=>e.stopPropagation()} onClick={onEmojiClick}
-          style={{position:"relative",width:42,height:42,flexShrink:0,cursor:"pointer"}}
-          title="Marquer comme terminé">
-          <Ring pct={pct} color={pct>0?hab.color:t.muted} size={42} stroke={3.5} t={t} hideText/>
+          style={{position:"relative",width:42,height:42,flexShrink:0,cursor:"pointer"}}>
+          <Ring pct={pct} size={42} stroke={3.5} glow={done} hideText/>
           <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            {pct===100
-              ? <span style={{fontSize:16}}>✓</span>
-              : <span style={{fontSize:16}}>{hab.emoji}</span>}
+            <span style={{fontSize:16,filter:done?"drop-shadow(0 0 5px rgba(16,185,129,0.9))":"none"}}>{done?"✓":hab.emoji}</span>
           </div>
         </div>
         <div style={{flex:1,minWidth:0,pointerEvents:"none"}}>
-          <div style={{fontWeight:700,fontSize:15,color:pct===100?hab.color:t.text,fontFamily:t.font,transition:"color .3s",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{hab.name}</div>
-          <div style={{fontSize:12,color:t.sub,marginTop:3,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-            {s>0&&<span style={{color:hab.color,fontWeight:600}}>🔥 {s}j</span>}
-            {prog
-              ? <span style={{color:pct>0?hab.color:t.sub}}>{prog}</span>
-              : pct===100
-                ? <span style={{color:hab.color}}>✓ Terminé !</span>
-                : pct>0
-                  ? <span style={{color:hab.color}}>{pct}%</span>
-                  : <span>← Glisse pour terminer</span>}
+          <div style={{fontWeight:700,fontSize:15,color:done?EMERALD:T.text,fontFamily:T.font,transition:"color .3s",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{hab.name}</div>
+          <div style={{fontSize:12,color:T.sub,marginTop:3,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            {s>0&&<span style={{color:done?EMERALD:"rgba(255,255,255,0.6)",fontWeight:600}}>🔥 {s}j</span>}
+            {prog?<span style={{color:pct>0?EMERALD:T.sub}}>{prog}</span>:done?<span style={{color:EMERALD}}>✓ Terminé !</span>:pct>0?<span style={{color:"rgba(255,255,255,0.7)"}}>{Math.round(pct)}%</span>:<span>← Glisse pour terminer</span>}
           </div>
         </div>
         <div data-ctrl="1" style={{pointerEvents:"all"}} onPointerDown={e=>e.stopPropagation()}>
-          <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:t.sub,fontSize:16,padding:"4px 6px"}}>✎</button>
+          <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.sub,fontSize:16,padding:"4px 6px"}}>✎</button>
         </div>
       </div>
     </div>
@@ -276,10 +288,9 @@ function SwipeCard({hab, pct, onPct, onCommit, onEdit, t, completing}){
 }
 
 /* ─── HABIT FORM ─── */
-function HabitForm({hab,onSave,onDelete,onClose,t}){
+function HabitForm({hab,onSave,onDelete,onClose}){
   const[name,setName]=useState(hab?.name||"");
   const[emoji,setEmoji]=useState(hab?.emoji||"🏃");
-  const[color,setColor]=useState(hab?.color||HABIT_COLORS[0]);
   const[freq,setFreq]=useState(hab?.frequency||"daily");
   const[days,setDays]=useState(hab?.days||[0,1,2,3,4,5,6]);
   const[xpw,setXpw]=useState(hab?.timesPerWeek||3);
@@ -287,43 +298,43 @@ function HabitForm({hab,onSave,onDelete,onClose,t}){
   const[qty,setQty]=useState(hab?.goalQty||1);
   const[unit,setUnit]=useState(hab?.goalUnit||"fois");
   const[saved,setSaved]=useState(false);
-  const inp={width:"100%",padding:"10px 12px",borderRadius:10,border:`1px solid ${t.border}`,background:t.bg,color:t.text,fontSize:14,fontFamily:t.ui,outline:"none",boxSizing:"border-box"};
-  const save=()=>{if(!name.trim())return;setSaved(true);setTimeout(()=>onSave({name:name.trim(),emoji,color,frequency:freq,days,timesPerWeek:xpw,goalQty:meas?Number(qty):null,goalUnit:meas?unit:""}),380);};
+  const inp={width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.07)",color:T.text,fontSize:14,fontFamily:T.ui,outline:"none",boxSizing:"border-box"};
+  const save=()=>{if(!name.trim())return;setSaved(true);setTimeout(()=>onSave({name:name.trim(),emoji,frequency:freq,days,timesPerWeek:xpw,goalQty:meas?Number(qty):null,goalUnit:meas?unit:""}),380);};
   return(
     <>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-        <h2 style={{margin:0,fontSize:18,fontWeight:700,fontFamily:t.font,color:t.text}}>{hab?"Modifier":"Nouvelle habitude"}</h2>
-        <button onClick={onClose} style={{background:t.border,border:"none",borderRadius:20,width:32,height:32,cursor:"pointer",color:t.text,fontSize:15}}>✕</button>
+        <h2 style={{margin:0,fontSize:18,fontWeight:700,color:T.text}}>{hab?"Modifier":"Nouvelle habitude"}</h2>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:20,width:32,height:32,cursor:"pointer",color:T.text,fontSize:15}}>✕</button>
       </div>
       <div style={{marginBottom:16}}>
-        <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Icône</label>
+        <label style={{fontSize:11,color:T.sub,textTransform:"uppercase",letterSpacing:1}}>Icône</label>
         <div style={{display:"flex",alignItems:"center",gap:10,marginTop:8}}>
-          <div style={{width:48,height:48,borderRadius:14,background:color+"22",border:`2px solid ${color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>{emoji}</div>
+          <div style={{width:48,height:48,borderRadius:14,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>{emoji}</div>
           <input value={emoji} onChange={e=>{const c=[...e.target.value];if(c.length)setEmoji(c[c.length-1]);}} placeholder="Tape un emoji 🎯" style={{...inp,flex:1}}/>
         </div>
       </div>
       <div style={{marginBottom:16}}>
-        <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Nom</label>
+        <label style={{fontSize:11,color:T.sub,textTransform:"uppercase",letterSpacing:1}}>Nom</label>
         <input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&save()} placeholder="Ex : Boire de l'eau" style={{...inp,marginTop:8}}/>
       </div>
-      <div style={{marginBottom:16,background:t.bg,borderRadius:14,padding:14,border:`1px solid ${t.border}`}}>
+      <div style={{marginBottom:16,background:"rgba(255,255,255,0.05)",borderRadius:14,padding:14,border:"1px solid rgba(255,255,255,0.1)"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:meas?14:0}}>
           <div>
-            <div style={{fontWeight:600,fontSize:14,color:t.text}}>Objectif mesurable</div>
-            <div style={{fontSize:12,color:t.sub,marginTop:2}}>Quantité + unité précises</div>
+            <div style={{fontWeight:600,fontSize:14,color:T.text}}>Objectif mesurable</div>
+            <div style={{fontSize:12,color:T.sub,marginTop:2}}>Quantité + unité précises</div>
           </div>
-          <button onClick={()=>setMeas(p=>!p)} style={{width:46,height:26,borderRadius:13,border:"none",cursor:"pointer",background:meas?color:t.border,position:"relative",transition:"background .25s",flexShrink:0}}>
+          <button onClick={()=>setMeas(p=>!p)} style={{width:46,height:26,borderRadius:13,border:"none",cursor:"pointer",background:meas?EMERALD:"rgba(255,255,255,0.15)",position:"relative",transition:"background .25s",flexShrink:0}}>
             <div style={{position:"absolute",top:3,width:20,height:20,borderRadius:"50%",background:"#fff",left:meas?22:3,transition:"left .25s"}}/>
           </button>
         </div>
         {meas&&(
           <div style={{display:"flex",gap:8,marginTop:4}}>
             <div style={{flex:"0 0 80px"}}>
-              <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Qté</label>
+              <label style={{fontSize:11,color:T.sub,textTransform:"uppercase",letterSpacing:1}}>Qté</label>
               <input type="number" min="0.1" step="0.1" value={qty} onChange={e=>setQty(e.target.value)} style={{...inp,marginTop:6,textAlign:"center",fontWeight:700}}/>
             </div>
             <div style={{flex:1}}>
-              <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Unité</label>
+              <label style={{fontSize:11,color:T.sub,textTransform:"uppercase",letterSpacing:1}}>Unité</label>
               <select value={unit} onChange={e=>setUnit(e.target.value)} style={{...inp,marginTop:6}}>
                 {UNITS.map(u=><option key={u} value={u}>{u||"Sans unité"}</option>)}
               </select>
@@ -332,43 +343,37 @@ function HabitForm({hab,onSave,onDelete,onClose,t}){
         )}
       </div>
       <div style={{marginBottom:16}}>
-        <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Couleur</label>
-        <div style={{display:"flex",gap:8,marginTop:8}}>
-          {HABIT_COLORS.map(c=><button key={c} onClick={()=>setColor(c)} style={{width:28,height:28,borderRadius:"50%",background:c,cursor:"pointer",border:`3px solid ${color===c?"#fff":"transparent"}`,transform:color===c?"scale(1.18)":"scale(1)",transition:"all .2s"}}/>)}
-        </div>
-      </div>
-      <div style={{marginBottom:16}}>
-        <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Fréquence</label>
+        <label style={{fontSize:11,color:T.sub,textTransform:"uppercase",letterSpacing:1}}>Fréquence</label>
         <div style={{display:"flex",gap:6,marginTop:8}}>
           {[{v:"daily",l:"Chaque jour"},{v:"weekly",l:"Jours précis"},{v:"xperweek",l:"X fois/sem"}].map(({v,l})=>(
-            <button key={v} onClick={()=>setFreq(v)} style={{flex:1,padding:"8px 4px",borderRadius:10,border:`1.5px solid ${freq===v?color:t.border}`,background:freq===v?color+"22":"transparent",color:freq===v?color:t.sub,cursor:"pointer",fontSize:12,fontFamily:t.ui,fontWeight:freq===v?600:400}}>{l}</button>
+            <button key={v} onClick={()=>setFreq(v)} style={{flex:1,padding:"8px 4px",borderRadius:10,border:`1.5px solid ${freq===v?T.accent:"rgba(255,255,255,0.15)"}`,background:freq===v?"rgba(255,255,255,0.1)":"transparent",color:freq===v?T.accent:T.sub,cursor:"pointer",fontSize:12,fontFamily:T.ui,fontWeight:freq===v?600:400}}>{l}</button>
           ))}
         </div>
       </div>
       {freq==="weekly"&&(
         <div style={{marginBottom:16}}>
-          <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Jours</label>
+          <label style={{fontSize:11,color:T.sub,textTransform:"uppercase",letterSpacing:1}}>Jours</label>
           <div style={{display:"flex",gap:5,marginTop:8}}>
-            {DAYS_FR.map((d,i)=><button key={i} onClick={()=>setDays(p=>p.includes(i)?p.filter(x=>x!==i):[...p,i].sort())} style={{flex:1,padding:"8px 2px",borderRadius:10,border:`1.5px solid ${days.includes(i)?color:t.border}`,background:days.includes(i)?color+"22":"transparent",color:days.includes(i)?color:t.sub,cursor:"pointer",fontSize:11,fontFamily:t.ui,fontWeight:days.includes(i)?600:400}}>{d}</button>)}
+            {DAYS_FR.map((d,i)=><button key={i} onClick={()=>setDays(p=>p.includes(i)?p.filter(x=>x!==i):[...p,i].sort())} style={{flex:1,padding:"8px 2px",borderRadius:10,border:`1.5px solid ${days.includes(i)?T.accent:"rgba(255,255,255,0.15)"}`,background:days.includes(i)?"rgba(255,255,255,0.1)":"transparent",color:days.includes(i)?T.accent:T.sub,cursor:"pointer",fontSize:11,fontWeight:days.includes(i)?600:400}}>{d}</button>)}
           </div>
         </div>
       )}
       {freq==="xperweek"&&(
         <div style={{marginBottom:16}}>
-          <label style={{fontSize:11,color:t.sub,textTransform:"uppercase",letterSpacing:1}}>Objectif : {xpw}x/semaine</label>
-          <input type="range" min={1} max={7} value={xpw} onChange={e=>setXpw(+e.target.value)} style={{width:"100%",marginTop:8,accentColor:color}}/>
+          <label style={{fontSize:11,color:T.sub,textTransform:"uppercase",letterSpacing:1}}>Objectif : {xpw}x/semaine</label>
+          <input type="range" min={1} max={7} value={xpw} onChange={e=>setXpw(+e.target.value)} style={{width:"100%",marginTop:8,accentColor:T.accent}}/>
         </div>
       )}
-      <button onClick={save} style={{width:"100%",padding:"14px",border:"none",borderRadius:14,background:saved?"#4ade80":color,color:saved?"#0a0a0a":"#fff",fontWeight:700,cursor:"pointer",fontSize:16,fontFamily:t.ui,transition:"background .3s"}}>
+      <button onClick={save} style={{width:"100%",padding:"14px",border:"none",borderRadius:14,background:saved?EMERALD:T.accent,color:"#0a0a0a",fontWeight:700,cursor:"pointer",fontSize:16,transition:"background .3s"}}>
         {saved?"✓ Enregistré !":hab?"Enregistrer":"Créer l'habitude"}
       </button>
-      {hab&&<button onClick={()=>onDelete(hab.id)} style={{width:"100%",padding:"12px",border:`1px solid ${t.border}`,borderRadius:14,background:"transparent",color:"#f87171",fontWeight:600,cursor:"pointer",fontSize:14,fontFamily:t.ui,marginTop:10}}>🗑 Supprimer</button>}
+      {hab&&<button onClick={()=>onDelete(hab.id)} style={{width:"100%",padding:"12px",border:"1px solid rgba(248,113,113,0.4)",borderRadius:14,background:"transparent",color:"#f87171",fontWeight:600,cursor:"pointer",fontSize:14,marginTop:10}}>🗑 Supprimer</button>}
     </>
   );
 }
 
 /* ─── MOOD PICKER ─── */
-function MoodPicker({date,current,note,onSave,onClose,isCeleb,t}){
+function MoodPicker({date,current,note,isCeleb,onSave,onClose}){
   const[mood,setMood]=useState(current??-1);
   const[txt,setTxt]=useState(note||"");
   return(
@@ -376,20 +381,20 @@ function MoodPicker({date,current,note,onSave,onClose,isCeleb,t}){
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
         <div>
           {isCeleb&&<div style={{fontSize:20,marginBottom:4}}>🎉 Toutes les tâches faites !</div>}
-          <h2 style={{margin:0,fontSize:18,fontWeight:700,fontFamily:t.font,color:t.text}}>Ta journée en un mot ?</h2>
+          <h2 style={{margin:0,fontSize:18,fontWeight:700,color:T.text}}>Ta journée en un mot ?</h2>
         </div>
-        <button onClick={onClose} style={{background:t.border,border:"none",borderRadius:20,width:32,height:32,cursor:"pointer",color:t.text,fontSize:15,flexShrink:0}}>✕</button>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:20,width:32,height:32,cursor:"pointer",color:T.text,fontSize:15,flexShrink:0}}>✕</button>
       </div>
       <div style={{display:"flex",justifyContent:"space-around",padding:"12px 0 20px"}}>
         {MOODS.map((m,i)=>(
           <button key={i} onClick={()=>setMood(i)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",transform:mood===i?"scale(1.3)":"scale(1)",transition:"transform .2s cubic-bezier(.34,1.56,.64,1)"}}>
             <span style={{fontSize:30}}>{m.emoji}</span>
-            <span style={{fontSize:10,color:mood===i?m.color:t.sub,fontWeight:mood===i?700:400,fontFamily:t.ui}}>{m.label}</span>
+            <span style={{fontSize:10,color:mood===i?m.color:T.sub,fontWeight:mood===i?700:400}}>{m.label}</span>
           </button>
         ))}
       </div>
-      <textarea value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Un mot sur ta journée… (optionnel)" style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1px solid ${t.border}`,background:t.bg,color:t.text,fontSize:14,fontFamily:t.ui,outline:"none",resize:"none",height:72,boxSizing:"border-box",marginBottom:14}}/>
-      <button onClick={()=>mood>=0&&onSave(mood,txt)} style={{width:"100%",padding:"14px",border:"none",borderRadius:14,background:mood>=0?MOODS[mood].color:t.border,color:mood>=0?"#0a0a0a":t.sub,fontWeight:700,cursor:mood>=0?"pointer":"default",fontSize:16,fontFamily:t.ui,transition:"background .3s"}}>
+      <textarea value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Un mot sur ta journée… (optionnel)" style={{width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.07)",color:T.text,fontSize:14,outline:"none",resize:"none",height:72,boxSizing:"border-box",marginBottom:14}}/>
+      <button onClick={()=>mood>=0&&onSave(mood,txt)} style={{width:"100%",padding:"14px",border:"none",borderRadius:14,background:mood>=0?MOODS[mood].color:"rgba(255,255,255,0.1)",color:mood>=0?"#0a0a0a":T.sub,fontWeight:700,cursor:mood>=0?"pointer":"default",fontSize:16,transition:"background .3s"}}>
         {mood>=0?"Enregistrer ✓":"Sélectionne une humeur"}
       </button>
     </>
@@ -397,38 +402,38 @@ function MoodPicker({date,current,note,onSave,onClose,isCeleb,t}){
 }
 
 /* ─── DAY DETAIL ─── */
-function DayDetail({date,habits,logs,mood,onClose,t}){
+function DayDetail({date,habits,logs,mood,onClose}){
   const sc=dayScore(habits,logs,date),md=mood?MOODS[mood.mood]:null;
   return(
     <>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-        <h2 style={{margin:0,fontSize:17,fontWeight:700,fontFamily:t.font,color:t.text,textTransform:"capitalize"}}>
+        <h2 style={{margin:0,fontSize:17,fontWeight:700,color:T.text,textTransform:"capitalize"}}>
           {new Date(date+"T12:00:00").toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}
         </h2>
-        <button onClick={onClose} style={{background:t.border,border:"none",borderRadius:20,width:32,height:32,cursor:"pointer",color:t.text,fontSize:15}}>✕</button>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:20,width:32,height:32,cursor:"pointer",color:T.text,fontSize:15}}>✕</button>
       </div>
       {md&&(
-        <div style={{background:t.bg,borderRadius:12,padding:"12px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:12,border:`1px solid ${t.border}`}}>
+        <div style={{background:"rgba(255,255,255,0.06)",borderRadius:12,padding:"12px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:12,border:"1px solid rgba(255,255,255,0.12)"}}>
           <span style={{fontSize:26}}>{md.emoji}</span>
           <div style={{flex:1}}>
-            <div style={{fontWeight:600,color:md.color,fontFamily:t.font}}>{md.label}</div>
-            {mood.note&&<div style={{fontSize:13,color:t.sub,marginTop:2}}>{mood.note}</div>}
+            <div style={{fontWeight:600,color:md.color}}>{md.label}</div>
+            {mood.note&&<div style={{fontSize:13,color:T.sub,marginTop:2}}>{mood.note}</div>}
           </div>
-          {sc!==null&&<div style={{textAlign:"right"}}><div style={{fontWeight:700,fontSize:20,color:scoreColor(sc),fontFamily:"monospace"}}>{sc}%</div><div style={{fontSize:11,color:t.sub}}>complétion</div></div>}
+          {sc!==null&&<div style={{textAlign:"right"}}><div style={{fontWeight:700,fontSize:20,color:sc>=100?EMERALD:"rgba(255,255,255,0.8)",fontFamily:"monospace"}}>{sc}%</div><div style={{fontSize:11,color:T.sub}}>complétion</div></div>}
         </div>
       )}
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
         {habits.filter(h=>scheduled(h,date)).map(h=>{
           const v=logs[date]?.[h.id]||0,prog=fmtProgress(h,v);
           return(
-            <div key={h.id} style={{background:t.bg,borderRadius:12,padding:"11px 14px",display:"flex",alignItems:"center",gap:12,border:`1px solid ${v>0?h.color+"44":t.border}`,position:"relative",overflow:"hidden"}}>
-              <div style={{position:"absolute",inset:0,width:`${v}%`,background:h.color+"15",pointerEvents:"none"}}/>
+            <div key={h.id} style={{background:"rgba(255,255,255,0.04)",borderRadius:12,padding:"11px 14px",display:"flex",alignItems:"center",gap:12,border:`1px solid ${v>0?"rgba(16,185,129,0.3)":"rgba(255,255,255,0.08)"}`,position:"relative",overflow:"hidden"}}>
+              <div style={{position:"absolute",inset:0,width:`${v}%`,background:"rgba(16,185,129,0.06)",pointerEvents:"none"}}/>
               <span style={{fontSize:20,position:"relative"}}>{h.emoji}</span>
               <div style={{flex:1,position:"relative"}}>
-                <div style={{fontWeight:600,fontSize:14,color:t.text}}>{h.name}</div>
-                {prog&&<div style={{fontSize:12,color:v>0?h.color:t.sub,marginTop:1}}>{prog}</div>}
+                <div style={{fontWeight:600,fontSize:14,color:T.text}}>{h.name}</div>
+                {prog&&<div style={{fontSize:12,color:v>0?EMERALD:T.sub,marginTop:1}}>{prog}</div>}
               </div>
-              <div style={{position:"relative"}}>{v===0?<span style={{color:"#f87171",fontSize:13,fontWeight:600}}>Non fait</span>:v>=100?<span style={{color:h.color,fontSize:13,fontWeight:700}}>✓ Fait</span>:<span style={{color:h.color,fontSize:13,fontWeight:700}}>{v}%</span>}</div>
+              <div style={{position:"relative"}}>{v===0?<span style={{color:"#f87171",fontSize:13,fontWeight:600}}>Non fait</span>:v>=100?<span style={{color:EMERALD,fontSize:13,fontWeight:700}}>✓ Fait</span>:<span style={{color:"rgba(255,255,255,0.7)",fontSize:13,fontWeight:700}}>{v}%</span>}</div>
             </div>
           );
         })}
@@ -438,7 +443,7 @@ function DayDetail({date,habits,logs,mood,onClose,t}){
 }
 
 /* ─── YEAR CALENDAR ─── */
-function YearCalendar({year,habits,logs,moods,onDay,t}){
+function YearCalendar({year,habits,logs,moods,onDay}){
   const td=today();
   const months=Array.from({length:12},(_,m)=>{
     const days=[],first=new Date(year,m,1),last=new Date(year,m+1,0).getDate();
@@ -449,18 +454,18 @@ function YearCalendar({year,habits,logs,moods,onDay,t}){
   const cellBg=d=>{
     if(!d||d>td)return"transparent";
     const mood=moods[d];if(mood)return MOODS[mood.mood].color;
-    const sc=dayScore(habits,logs,d);if(sc===null)return t.border;
-    if(sc===0)return t.muted;if(sc<50)return"#fb923c55";if(sc<100)return"#facc1566";return"#4ade8066";
+    const sc=dayScore(habits,logs,d);if(sc===null)return"rgba(255,255,255,0.08)";
+    if(sc===0)return"rgba(255,255,255,0.05)";if(sc<50)return"rgba(251,146,60,0.4)";if(sc<100)return"rgba(250,204,21,0.4)";return"rgba(16,185,129,0.5)";
   };
   return(
     <div style={{display:"flex",flexDirection:"column",gap:20}}>
       {months.map(({m,days})=>(
         <div key={m}>
-          <div style={{fontSize:11,fontWeight:700,color:t.sub,marginBottom:6,textTransform:"uppercase",letterSpacing:1.2,fontFamily:t.ui}}>{MONTHS_FULL[m]}</div>
+          <div style={{fontSize:11,fontWeight:700,color:T.sub,marginBottom:6,textTransform:"uppercase",letterSpacing:1.2}}>{MONTHS_FULL[m]}</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2.5}}>
-            {DAYS_FR.map(d=><div key={d} style={{fontSize:8,color:t.muted,textAlign:"center",paddingBottom:2,fontFamily:t.ui}}>{d[0]}</div>)}
+            {DAYS_FR.map(d=><div key={d} style={{fontSize:8,color:T.muted,textAlign:"center",paddingBottom:2}}>{d[0]}</div>)}
             {days.map((d,i)=>(
-              <button key={i} onClick={()=>d&&d<=td&&onDay(d)} style={{aspectRatio:"1",borderRadius:3,background:cellBg(d),border:`1.5px solid ${d===td?"#f472b6":"transparent"}`,cursor:d&&d<=td?"pointer":"default"}}/>
+              <button key={i} onClick={()=>d&&d<=td&&onDay(d)} style={{aspectRatio:"1",borderRadius:3,background:cellBg(d),border:`1.5px solid ${d===td?"rgba(255,255,255,0.6)":"transparent"}`,cursor:d&&d<=td?"pointer":"default"}}/>
             ))}
           </div>
         </div>
@@ -470,7 +475,7 @@ function YearCalendar({year,habits,logs,moods,onDay,t}){
 }
 
 /* ─── WEEK VIEW ─── */
-function WeekView({habits,logs,moods,onEdit,onToggle,t}){
+function WeekView({habits,logs,moods,onEdit,onToggle}){
   const td=today();
   const weekDays=(()=>{const days=[],now=new Date(),d=(now.getDay()+6)%7;for(let i=0;i<7;i++){const x=new Date(now);x.setDate(now.getDate()-d+i);days.push(x.toISOString().split("T")[0]);}return days;})();
   return(
@@ -480,28 +485,27 @@ function WeekView({habits,logs,moods,onEdit,onToggle,t}){
           const sc=dayScore(habits,logs,d)??0,md=moods[d]?MOODS[moods[d].mood]:null,isT=d===td,isFut=d>td;
           return(
             <div key={d} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-              <span style={{fontSize:9,color:isT?t.accent:t.sub,fontWeight:isT?700:400,fontFamily:t.ui}}>{DAYS_FR[i]}</span>
-              <Ring pct={sc} color={md?md.color:isT?t.accent:isFut?t.border:"#a78bfa"} size={34} stroke={3} t={t}>
-                {md&&<span style={{fontSize:13}}>{md.emoji}</span>}
-              </Ring>
-              <span style={{fontSize:9,color:isT?t.accent:t.sub,fontFamily:t.ui}}>{new Date(d+"T12:00:00").getDate()}</span>
+              <span style={{fontSize:9,color:isT?T.accent:T.sub,fontWeight:isT?700:400}}>{DAYS_FR[i]}</span>
+              <Ring pct={sc} size={34} stroke={3} glow={sc>=100}/>
+              {md&&<span style={{fontSize:11}}>{md.emoji}</span>}
+              <span style={{fontSize:9,color:isT?T.accent:T.sub}}>{new Date(d+"T12:00:00").getDate()}</span>
             </div>
           );
         })}
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
         {habits.map(h=>(
-          <div key={h.id} style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:14,padding:13}}>
+          <div key={h.id} style={{background:"rgba(255,255,255,0.06)",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:14,padding:13}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
               <span style={{fontSize:17}}>{h.emoji}</span>
-              <span style={{fontWeight:600,fontSize:14,flex:1,color:t.text,fontFamily:t.font}}>{h.name}</span>
-              {h.goalQty&&<span style={{fontSize:11,color:h.color,fontFamily:t.ui}}>{h.goalQty}{h.goalUnit}</span>}
-              <button onClick={()=>onEdit(h)} style={{background:"none",border:"none",cursor:"pointer",color:t.sub,fontSize:13,padding:"2px 6px"}}>✎</button>
+              <span style={{fontWeight:600,fontSize:14,flex:1,color:T.text}}>{h.name}</span>
+              {h.goalQty&&<span style={{fontSize:11,color:EMERALD}}>{h.goalQty}{h.goalUnit}</span>}
+              <button onClick={()=>onEdit(h)} style={{background:"none",border:"none",cursor:"pointer",color:T.sub,fontSize:13,padding:"2px 6px"}}>✎</button>
             </div>
             <div style={{display:"flex",gap:3}}>
               {weekDays.map((d,i)=>{
                 const sch=scheduled(h,d),val=logs[d]?.[h.id]||0,isFut=d>td;
-                return<button key={d} onClick={()=>sch&&!isFut&&onToggle(h.id,d,val>=100?0:100)} style={{flex:1,height:30,borderRadius:7,cursor:sch&&!isFut?"pointer":"default",background:val>=100?h.color:val>0?h.color+"44":"transparent",border:`1.5px solid ${d===td&&sch?h.color+"88":val>0?h.color+"44":t.border}`,color:val>=100?"#fff":val>0?h.color:t.sub,fontSize:9,fontWeight:700,transition:"all .2s"}}>{val>=100?"✓":val>0?`${val}%`:sch?DAYS_FR[i][0]:"·"}</button>;
+                return<button key={d} onClick={()=>sch&&!isFut&&onToggle(h.id,d,val>=100?0:100)} style={{flex:1,height:30,borderRadius:7,cursor:sch&&!isFut?"pointer":"default",background:val>=100?"rgba(16,185,129,0.5)":val>0?"rgba(16,185,129,0.2)":"transparent",border:`1.5px solid ${d===td&&sch?"rgba(255,255,255,0.3)":val>0?"rgba(16,185,129,0.3)":"rgba(255,255,255,0.1)"}`,color:val>=100?"#fff":val>0?EMERALD:T.sub,fontSize:9,fontWeight:700,transition:"all .2s"}}>{val>=100?"✓":val>0?`${val}%`:sch?DAYS_FR[i][0]:"·"}</button>;
               })}
             </div>
           </div>
@@ -511,123 +515,48 @@ function WeekView({habits,logs,moods,onEdit,onToggle,t}){
   );
 }
 
-/* ─── SORTED HABIT LIST (FLIP animation) ────────────────────────────────────
-   Technique FLIP :
-     F = on snapshot les positions AVANT le re-tri (getBoundingClientRect)
-     L = on applique le nouvel ordre (React re-render)
-     I = on mesure les positions APRÈS, on calcule le delta, on positionne les
-         éléments à leur ancienne place (translateY inverse)
-     P = on retire le transform → le browser anime vers 0 avec une transition CSS
-─── */
-function SortedHabitList({habits, localProg, onPct, onCommit, onEdit, t}){
+/* ─── SORTED LIST WITH FLIP ─── */
+function SortedHabitList({habits,localProg,onPct,onCommit,onEdit}){
   const addOrder=useRef(habits.map(h=>h.id));
-
-  const[orderedIds, setOrderedIds]=useState(()=>{
+  const[orderedIds,setOrderedIds]=useState(()=>{
     const done=habits.filter(h=>(localProg[h.id]||0)>=100).map(h=>h.id);
     const notDone=habits.filter(h=>(localProg[h.id]||0)<100).map(h=>h.id);
-    return [...notDone,...done];
+    return[...notDone,...done];
   });
-
-  /* ref du conteneur + refs individuelles par carte */
   const containerRef=useRef();
-  const cardRefs=useRef({});   /* id → DOM node */
+  const cardRefs=useRef({});
 
-  /* Snapshot des positions avant re-tri */
-  const snapshotRef=useRef({});
-
-  /* Sync ajouts/suppressions */
   useEffect(()=>{
     const currentIds=new Set(habits.map(h=>h.id));
     const newHabs=habits.filter(h=>!addOrder.current.includes(h.id));
-    if(newHabs.length){
-      newHabs.forEach(h=>addOrder.current.push(h.id));
-      setOrderedIds(prev=>{
-        const newIds=newHabs.map(h=>h.id);
-        const existing=prev.filter(id=>currentIds.has(id));
-        const done=existing.filter(id=>(localProg[id]||0)>=100);
-        const notDone=existing.filter(id=>(localProg[id]||0)<100);
-        return [...newIds,...notDone,...done];
-      });
-    }
+    if(newHabs.length){newHabs.forEach(h=>addOrder.current.push(h.id));setOrderedIds(prev=>{const newIds=newHabs.map(h=>h.id);const existing=prev.filter(id=>currentIds.has(id));const done=existing.filter(id=>(localProg[id]||0)>=100);const notDone=existing.filter(id=>(localProg[id]||0)<100);return[...newIds,...notDone,...done];});}
     setOrderedIds(prev=>prev.filter(id=>currentIds.has(id)));
   },[habits]);
 
   const habMap=Object.fromEntries(habits.map(h=>[h.id,h]));
 
-  /* Lance l'animation FLIP pour un re-tri donné */
   const flipAndSort=useCallback((nextOrderFn)=>{
-    /* F — snapshot positions actuelles */
-    const before={};
-    Object.entries(cardRefs.current).forEach(([id,el])=>{
-      if(el)before[id]=el.getBoundingClientRect().top;
-    });
-    snapshotRef.current=before;
-
-    /* L — applique le nouvel ordre */
-    setOrderedIds(prev=>{
-      const next=nextOrderFn(prev);
-      /* I+P — après que React a rendu le nouvel ordre */
-      requestAnimationFrame(()=>{
-        requestAnimationFrame(()=>{
-          Object.entries(cardRefs.current).forEach(([id,el])=>{
-            if(!el||before[id]==null)return;
-            const after=el.getBoundingClientRect().top;
-            const delta=before[id]-after;   /* déplacement inverse */
-            if(Math.abs(delta)<1)return;     /* rien à animer */
-            /* Positionne l'élément à son ancienne place sans transition */
-            el.style.transition="none";
-            el.style.transform=`translateY(${delta}px)`;
-            /* Force reflow puis anime vers 0 */
-            el.getBoundingClientRect();
-            el.style.transition="transform 0.48s cubic-bezier(0.4,0,0.2,1)";
-            el.style.transform="translateY(0)";
-            /* Nettoie après l'animation */
-            const onEnd=()=>{el.style.transition="";el.style.transform="";el.removeEventListener("transitionend",onEnd);};
-            el.addEventListener("transitionend",onEnd);
-          });
-        });
-      });
+    const before={};Object.entries(cardRefs.current).forEach(([id,el])=>{if(el)before[id]=el.getBoundingClientRect().top;});
+    setOrderedIds(prev=>{const next=nextOrderFn(prev);
+      requestAnimationFrame(()=>{requestAnimationFrame(()=>{Object.entries(cardRefs.current).forEach(([id,el])=>{if(!el||before[id]==null)return;const after=el.getBoundingClientRect().top;const delta=before[id]-after;if(Math.abs(delta)<1)return;el.style.transition="none";el.style.transform=`translateY(${delta}px)`;el.getBoundingClientRect();el.style.transition="transform 0.48s cubic-bezier(0.4,0,0.2,1)";el.style.transform="translateY(0)";const onEnd=()=>{el.style.transition="";el.style.transform="";el.removeEventListener("transitionend",onEnd);};el.addEventListener("transitionend",onEnd);});});});
       return next;
     });
   },[]);
 
   const handleCommit=useCallback((habId,pct)=>{
     onCommit(habId,pct);
-
-    if(pct>=100){
-      flipAndSort(prev=>{
-        const notDone=prev.filter(id=>id!==habId&&(localProg[id]||0)<100);
-        const done=prev.filter(id=>id===habId||(localProg[id]||0)>=100);
-        return [...notDone,...done];
-      });
-    } else {
-      /* Décoché → remonte en tête sans animation (instantané, naturel) */
-      setOrderedIds(prev=>{
-        const rest=prev.filter(id=>id!==habId);
-        const done=rest.filter(id=>(localProg[id]||0)>=100);
-        const notDone=rest.filter(id=>(localProg[id]||0)<100);
-        return [habId,...notDone,...done];
-      });
-    }
+    if(pct>=100){flipAndSort(prev=>{const notDone=prev.filter(id=>id!==habId&&(localProg[id]||0)<100);const done=prev.filter(id=>id===habId||(localProg[id]||0)>=100);return[...notDone,...done];});}
+    else{setOrderedIds(prev=>{const rest=prev.filter(id=>id!==habId);const done=rest.filter(id=>(localProg[id]||0)>=100);const notDone=rest.filter(id=>(localProg[id]||0)<100);return[habId,...notDone,...done];});}
   },[onCommit,localProg,flipAndSort]);
 
   const visible=orderedIds.filter(id=>habMap[id]);
-
   return(
     <div ref={containerRef} style={{display:"flex",flexDirection:"column",gap:10}}>
       {visible.map(id=>{
-        const h=habMap[id];
-        const pct=localProg[h.id]||0;
+        const h=habMap[id];const pct=localProg[h.id]||0;
         return(
-          <div key={h.id} ref={el=>{ if(el)cardRefs.current[h.id]=el; else delete cardRefs.current[h.id]; }} className="habit-item">
-            <SwipeCard
-              hab={h}
-              pct={pct}
-              onPct={p=>onPct(h.id,p)}
-              onCommit={p=>handleCommit(h.id,p)}
-              onEdit={()=>onEdit(h)}
-              t={t}
-            />
+          <div key={h.id} ref={el=>{if(el)cardRefs.current[h.id]=el;else delete cardRefs.current[h.id];}}>
+            <SwipeCard hab={h} pct={pct} onPct={p=>onPct(h.id,p)} onCommit={p=>handleCommit(h.id,p)} onEdit={()=>onEdit(h)}/>
           </div>
         );
       })}
@@ -640,7 +569,9 @@ function App(){
   const[habits,setHabits]=useState([]);
   const[logs,setLogs]=useState({});
   const[moods,setMoods]=useState({});
-  const[themeId,setThemeId]=useState("nebula");
+  const[crystals,setCrystals]=useState(0);
+  const[masterStreak,setMasterStreak]=useState(0);
+  const[perfectDays,setPerfectDays]=useState(0); // total de journées parfaites (mod 7 = progress)
   const[loaded,setLoaded]=useState(false);
   const[tab,setTab]=useState("today");
   const[calYear,setCalYear]=useState(new Date().getFullYear());
@@ -653,31 +584,53 @@ function App(){
   const[toast,setToast]=useState(null);
   const[confetti,setConfetti]=useState(false);
   const[localProg,setLocalProg]=useState({});
+  const[zenMode,setZenMode]=useState(false);
   const syncRef=useRef({});
   const prevAllDone=useRef(false);
-  const t=THEMES[themeId];
+  const lastTap=useRef(0);
 
+  /* ─── LOAD ─── */
   useEffect(()=>{
-    const h=store.get(K.habits),l=store.get(K.logs),m=store.get(K.moods),th=store.get(K.theme);
+    const h=store.get(K.habits),l=store.get(K.logs),m=store.get(K.moods);
+    const cr=store.get(K.crystals)||0,ms=store.get(K.masterStreak)||0,pd=store.get(K.perfectDays)||0;
+    const zen=store.get(K.zenMode)||false;
     if(h)setHabits(h);
     if(l){setLogs(l);setLocalProg(l[today()]||{});}
     if(m)setMoods(m);
-    const resolvedTheme=th||"nebula";
-    if(th)setThemeId(resolvedTheme);
-    syncThemeColor(THEMES[resolvedTheme]?.header||THEMES.nebula.header);
+    setCrystals(cr);setMasterStreak(ms);setPerfectDays(pd);setZenMode(zen);
+
+    /* Vérification de nuit : journée d'hier complétée ? */
+    const lastCheck=store.get(K.lastCheck)||"";
+    const td=today(),yesterday=shift(td,-1);
+    if(lastCheck!==td){
+      store.set(K.lastCheck,td);
+      /* Calcul journée parfaite hier */
+      const habs=h||[];const logs2=l||{};
+      const yHabs=habs.filter(x=>scheduled(x,yesterday));
+      if(yHabs.length>0){
+        const allDoneYest=yHabs.every(x=>(logs2[yesterday]?.[x.id]||0)>=100);
+        if(!allDoneYest){
+          /* Journée manquée : consommer un cristal si dispo */
+          const curCr=cr;
+          if(curCr>0){
+            const newCr=curCr-1;setCrystals(newCr);store.set(K.crystals,newCr);
+            setToast({msg:"💎 Cristal utilisé ! Série sauvée !",color:"#60a5fa"});
+          } else {
+            /* Reset master streak */
+            setMasterStreak(0);store.set(K.masterStreak,0);
+          }
+        }
+      }
+    }
     setLoaded(true);
   },[]);
 
-  const pop=(msg,color)=>{setToast({msg,color});setTimeout(()=>setToast(null),2200);};
+  const pop=(msg,color)=>{setToast({msg,color});setTimeout(()=>setToast(null),2800);};
   const saveHabits=useCallback(h=>{setHabits(h);store.set(K.habits,h);},[]);
   const saveMoods=useCallback(m=>{setMoods(m);store.set(K.moods,m);},[]);
 
-  /* Mise à jour en temps réel pendant le drag (pas de persistance) */
-  const handleProg=useCallback((habId,pct)=>{
-    setLocalProg(prev=>({...prev,[habId]:pct}));
-  },[]);
+  const handleProg=useCallback((habId,pct)=>{setLocalProg(prev=>({...prev,[habId]:pct}));},[]);
 
-  /* Commit au relâchement → persistance dans les logs */
   const handleCommit=useCallback((habId,pct)=>{
     setLocalProg(prev=>{
       const next={...prev,[habId]:pct};
@@ -689,18 +642,36 @@ function App(){
     });
   },[]);
 
+  /* ─── DÉTECTION JOURNÉE PARFAITE ─── */
   useEffect(()=>{
     const td=today(),th=habits.filter(h=>scheduled(h,td));
     if(!th.length)return;
     const allDone=th.every(h=>(localProg[h.id]||0)>=100);
-    if(allDone&&!prevAllDone.current&&!moods[td]){prevAllDone.current=true;setConfetti(true);setMoodCeleb(true);setShowMood(true);}
+    if(allDone&&!prevAllDone.current){
+      prevAllDone.current=true;
+      setConfetti(true);
+      setMoodCeleb(true);
+      setShowMood(true);
+      /* +1 jour parfait → master streak */
+      setMasterStreak(prev=>{const n=prev+1;store.set(K.masterStreak,n);return n;});
+      setPerfectDays(prev=>{
+        const n=prev+1;
+        store.set(K.perfectDays,n);
+        /* Gain d'un cristal toutes les 7 journées parfaites */
+        if(n%7===0){
+          setCrystals(c=>{const nc=c+1;store.set(K.crystals,nc);return nc;});
+          setTimeout(()=>pop("💎 Cristal de Bouclier gagné !",T.accent),800);
+        }
+        return n;
+      });
+    }
     if(!allDone)prevAllDone.current=false;
-  },[localProg,habits,moods]);
+  },[localProg,habits]);
 
   const handleSaveHab=hab=>{
     let upd;
-    if(editHab){upd=habits.map(h=>h.id===editHab.id?{...h,...hab}:h);pop("✏️ Modifiée !",hab.color);}
-    else{const n={id:Date.now().toString(),...hab,createdAt:today()};upd=[...habits,n];pop("🌱 Créée !",hab.color);}
+    if(editHab){upd=habits.map(h=>h.id===editHab.id?{...h,...hab}:h);pop("✏️ Modifiée !","rgba(255,255,255,0.7)");}
+    else{const n={id:Date.now().toString(),...hab,createdAt:today()};upd=[...habits,n];pop("🌱 Créée !",EMERALD);}
     saveHabits(upd);setShowForm(false);setEditHab(null);setTab("today");
   };
 
@@ -716,7 +687,14 @@ function App(){
     setLogs(prev=>{const nl={...prev,[date]:{...prev[date],[habId]:val}};store.set(K.logs,nl);return nl;});
   },[]);
 
-  const setTheme=id=>{setThemeId(id);store.set(K.theme,id);syncThemeColor(THEMES[id]?.header||THEMES.nebula.header);};
+  /* Double-tap pour Zen mode */
+  const handleHeaderDoubleTap=()=>{
+    const now=Date.now();
+    if(now-lastTap.current<350){
+      setZenMode(p=>{const n=!p;store.set(K.zenMode,n);return n;});
+    }
+    lastTap.current=now;
+  };
 
   const td=today();
   const todayHabs=habits.filter(h=>scheduled(h,td));
@@ -725,146 +703,168 @@ function App(){
   const pctToday=todayHabs.length?Math.round(todayHabs.reduce((a,h)=>a+(localProg[h.id]||0),0)/todayHabs.length):0;
   const allDone=todayHabs.length>0&&todayHabs.every(h=>(localProg[h.id]||0)>=100);
   const todayMood=moods[td];
-  const earnedBadges=BADGES.filter(b=>b.check(habits,logs,moods));
 
-  if(!loaded)return <div style={{background:THEMES.nebula.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:THEMES.nebula.sub,fontFamily:"monospace"}}>Chargement…</div></div>;
+  if(!loaded)return<div style={{background:SEASON.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:"rgba(255,255,255,0.3)",fontFamily:"monospace"}}>Chargement…</div></div>;
 
   return(
-    <div style={{background:t.bg,minHeight:"100vh",fontFamily:t.ui,color:t.text,paddingBottom:80}}>
+    <div style={{background:SEASON.bg,minHeight:"100vh",color:T.text,paddingBottom:80,fontFamily:T.ui}}>
+      {/* BLOBS ANIMÉS */}
+      <div className="blob blob1" style={{background:SEASON.blob1}}/>
+      <div className="blob blob2" style={{background:SEASON.blob2}}/>
+      <div className="blob blob3" style={{background:SEASON.blob3}}/>
+
       {confetti&&<Confetti onDone={()=>setConfetti(false)}/>}
       {toast&&<Toast msg={toast.msg} color={toast.color}/>}
 
       {/* HEADER */}
-      <div style={{background:t.header,borderBottom:`1px solid ${t.border}`,padding:"16px 20px 14px",position:"sticky",top:0,zIndex:10}}>
-        <div style={{maxWidth:500,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div>
-            <h1 style={{margin:0,fontSize:tab==="today"?22:18,fontWeight:700,fontFamily:t.font,color:t.text}}>
-              {tab==="today"?"Aujourd'hui":tab==="week"?"Cette semaine":"Calendrier"}
-            </h1>
-            {tab==="today"&&<p style={{margin:"2px 0 0",fontSize:11,color:t.sub,textTransform:"capitalize"}}>{new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}</p>}
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            {tab==="today"&&todayHabs.length>0&&<Ring pct={pctToday} color={scoreColor(pctToday)} size={46} stroke={4} t={t}><span style={{fontSize:10,fontWeight:700,color:scoreColor(pctToday),fontFamily:"monospace"}}>{pctToday}%</span></Ring>}
-            <button onClick={()=>setShowSettings(true)} style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:12,width:38,height:38,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:17}}>⚙️</button>
+      <div style={{backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",background:"rgba(0,0,0,0.3)",borderBottom:"1px solid rgba(255,255,255,0.08)",padding:"16px 20px 14px",position:"sticky",top:0,zIndex:10}} onClick={tab==="today"?handleHeaderDoubleTap:undefined}>
+        <div style={{maxWidth:500,margin:"0 auto"}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
+            <div style={{flex:1}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <h1 style={{margin:0,fontSize:tab==="today"?20:17,fontWeight:700,color:T.text}}>
+                  {tab==="today"?"Aujourd'hui":tab==="week"?"Cette semaine":"Calendrier"}
+                </h1>
+                {tab==="today"&&zenMode&&<span style={{fontSize:11,color:T.accent,background:"rgba(255,255,255,0.1)",borderRadius:20,padding:"2px 8px"}}>Zen</span>}
+              </div>
+              {tab==="today"&&<p style={{margin:"2px 0 0",fontSize:11,color:T.sub,textTransform:"capitalize"}}>{new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}</p>}
+              {tab==="today"&&<MasterStreakBar masterStreak={masterStreak} crystals={crystals} perfectDays={perfectDays}/>}
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0,marginLeft:12}}>
+              {tab==="today"&&todayHabs.length>0&&(
+                <div style={{position:"relative",width:46,height:46}}>
+                  <Ring pct={pctToday} size={46} stroke={4} glow={pctToday>=100}/>
+                  <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <span style={{fontSize:10,fontWeight:700,color:pctToday>=100?EMERALD:"rgba(255,255,255,0.8)",fontFamily:"monospace"}}>{pctToday}%</span>
+                  </div>
+                </div>
+              )}
+              <button onClick={()=>setShowSettings(true)} style={{background:"rgba(255,255,255,0.08)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,width:38,height:38,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:17}}>⚙️</button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* CONTENT */}
-      <div style={{maxWidth:500,margin:"0 auto",padding:"16px 20px"}} className="page" key={tab}>
+      <div style={{maxWidth:500,margin:"0 auto",padding:"16px 20px",position:"relative",zIndex:1}} className="page" key={tab+(zenMode?"z":"n")}>
         {tab==="today"&&(
           <>
-            {todayHabs.length>0&&(
-              <div style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:14,padding:"10px 14px",marginBottom:14,display:"flex"}}>
-                {[{v:doneCnt,l:"Faites",c:"#4ade80"},{v:partCnt,l:"En cours",c:"#facc15"},{v:todayHabs.length-doneCnt-partCnt,l:"Restantes",c:t.sub}].map(({v,l,c})=>(
+            {todayHabs.length>0&&!zenMode&&(
+              <div style={{background:"rgba(255,255,255,0.06)",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:14,padding:"10px 14px",marginBottom:14,display:"flex"}}>
+                {[{v:doneCnt,l:"Faites",c:EMERALD},{v:partCnt,l:"En cours",c:"#facc15"},{v:todayHabs.length-doneCnt-partCnt,l:"Restantes",c:T.sub}].map(({v,l,c})=>(
                   <div key={l} style={{flex:1,textAlign:"center"}}>
                     <div style={{fontWeight:700,fontSize:20,color:c,fontFamily:"monospace"}}>{v}</div>
-                    <div style={{fontSize:11,color:t.sub}}>{l}</div>
+                    <div style={{fontSize:11,color:T.sub}}>{l}</div>
                   </div>
                 ))}
               </div>
             )}
             {habits.length===0?(
-              <div style={{textAlign:"center",padding:"60px 0",color:t.sub}}>
+              <div style={{textAlign:"center",padding:"60px 0",color:T.sub}}>
                 <div style={{fontSize:48}}>✨</div>
-                <p style={{marginTop:12,fontSize:15,fontFamily:t.font}}>Crée ta première habitude !</p>
+                <p style={{marginTop:12,fontSize:15}}>Crée ta première habitude !</p>
               </div>
             ):todayHabs.length===0?(
-              <div style={{textAlign:"center",padding:"40px 0",color:t.sub}}>
+              <div style={{textAlign:"center",padding:"40px 0",color:T.sub}}>
                 <div style={{fontSize:36}}>🎉</div>
-                <p style={{fontFamily:t.font}}>Rien de prévu aujourd'hui !</p>
+                <p>Rien de prévu aujourd'hui !</p>
               </div>
+            ):zenMode?(
+              <ZenMode habits={todayHabs} localProg={localProg} onPct={handleProg} onCommit={(id,p)=>{handleProg(id,p);handleCommit(id,p);}}/>
             ):(
-              <SortedHabitList
-                habits={todayHabs}
-                localProg={localProg}
-                onPct={handleProg}
-                onCommit={handleCommit}
-                onEdit={h=>{setEditHab(h);setShowForm(true);}}
-                t={t}
-              />
+              <SortedHabitList habits={todayHabs} localProg={localProg} onPct={handleProg} onCommit={handleCommit} onEdit={h=>{setEditHab(h);setShowForm(true);}}/>
             )}
-            {todayHabs.length>0&&!allDone&&!todayMood&&(
-              <button onClick={()=>{setMoodCeleb(false);setShowMood(true);}} style={{marginTop:12,width:"100%",padding:"10px",background:"transparent",border:`1px solid ${t.border}`,borderRadius:12,color:t.sub,fontSize:13,cursor:"pointer",fontFamily:t.ui}}>
+            {!zenMode&&todayHabs.length>0&&!allDone&&!todayMood&&(
+              <button onClick={()=>{setMoodCeleb(false);setShowMood(true);}} style={{marginTop:12,width:"100%",padding:"10px",background:"rgba(255,255,255,0.05)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,color:T.sub,fontSize:13,cursor:"pointer"}}>
                 🌙 Terminer ma journée
               </button>
             )}
-            <button onClick={()=>{setEditHab(null);setShowForm(true);}} style={{marginTop:10,width:"100%",padding:"13px",background:`linear-gradient(135deg,${t.accent},#a78bfa)`,border:"none",borderRadius:14,color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:t.ui}}>
-              + Nouvelle habitude
-            </button>
+            {!zenMode&&(
+              <button onClick={()=>{setEditHab(null);setShowForm(true);}} style={{marginTop:10,width:"100%",padding:"13px",background:`linear-gradient(135deg,${T.accent}cc,rgba(16,185,129,0.8))`,border:"none",borderRadius:14,color:"#0a0a0a",fontSize:15,fontWeight:700,cursor:"pointer"}}>
+                + Nouvelle habitude
+              </button>
+            )}
+            {tab==="today"&&<div style={{textAlign:"center",marginTop:10,fontSize:10,color:T.sub,opacity:0.4}}>Double-tap pour activer/désactiver le mode Zen</div>}
           </>
         )}
-        {tab==="week"&&<WeekView habits={habits} logs={logs} moods={moods} t={t} onEdit={h=>{setEditHab(h);setShowForm(true);}} onToggle={handleBulkToggle}/>}
+        {tab==="week"&&<WeekView habits={habits} logs={logs} moods={moods} onEdit={h=>{setEditHab(h);setShowForm(true);}} onToggle={handleBulkToggle}/>}
         {tab==="calendar"&&(
           <>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-              <button onClick={()=>setCalYear(y=>y-1)} style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:10,padding:"6px 16px",color:t.text,cursor:"pointer",fontSize:15}}>‹</button>
-              <span style={{fontWeight:700,fontSize:18,fontFamily:t.font,color:t.text}}>{calYear}</span>
-              <button onClick={()=>setCalYear(y=>y+1)} style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:10,padding:"6px 16px",color:t.text,cursor:"pointer",fontSize:15}}>›</button>
+              <button onClick={()=>setCalYear(y=>y-1)} style={{background:"rgba(255,255,255,0.08)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,padding:"6px 16px",color:T.text,cursor:"pointer",fontSize:15}}>‹</button>
+              <span style={{fontWeight:700,fontSize:18,color:T.text}}>{calYear}</span>
+              <button onClick={()=>setCalYear(y=>y+1)} style={{background:"rgba(255,255,255,0.08)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,padding:"6px 16px",color:T.text,cursor:"pointer",fontSize:15}}>›</button>
             </div>
             <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-              {MOODS.map((m,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:t.sub}}><div style={{width:9,height:9,borderRadius:2,background:m.color}}/>{m.emoji}</div>)}
+              {MOODS.map((m,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:T.sub}}><div style={{width:9,height:9,borderRadius:2,background:m.color}}/>{m.emoji}</div>)}
+              <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:T.sub}}><div style={{width:9,height:9,borderRadius:2,background:"rgba(16,185,129,0.5)"}}/><span>100%</span></div>
             </div>
-            <YearCalendar year={calYear} habits={habits} logs={logs} moods={moods} onDay={setShowDay} t={t}/>
+            <YearCalendar year={calYear} habits={habits} logs={logs} moods={moods} onDay={setShowDay}/>
           </>
         )}
       </div>
 
       {/* BOTTOM TABS */}
-      <div style={{position:"fixed",bottom:0,left:0,right:0,background:t.tab,borderTop:`1px solid ${t.tabBorder}`,padding:"8px 0 20px",zIndex:50}}>
+      <div style={{position:"fixed",bottom:0,left:0,right:0,backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",background:"rgba(0,0,0,0.5)",borderTop:"1px solid rgba(255,255,255,0.08)",padding:"8px 0 20px",zIndex:50}}>
         <div style={{maxWidth:500,margin:"0 auto",display:"flex",justifyContent:"center"}}>
           {[{k:"today",icon:"☀️",l:"Aujourd'hui"},{k:"week",icon:"📅",l:"Semaine"},{k:"calendar",icon:"🗓",l:"Calendrier"}].map(({k,icon,l})=>(
             <button key={k} onClick={()=>setTab(k)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,background:"none",border:"none",cursor:"pointer",padding:"6px 0"}}>
-              <span style={{fontSize:20,opacity:tab===k?1:0.45}}>{icon}</span>
-              <span style={{fontSize:10,color:tab===k?t.accent:t.sub,fontWeight:tab===k?700:400,fontFamily:t.ui}}>{l}</span>
-              {tab===k&&<div style={{width:20,height:2.5,background:t.accent,borderRadius:2,marginTop:1}}/>}
+              <span style={{fontSize:20,opacity:tab===k?1:0.4}}>{icon}</span>
+              <span style={{fontSize:10,color:tab===k?T.accent:T.sub,fontWeight:tab===k?700:400}}>{l}</span>
+              {tab===k&&<div style={{width:20,height:2.5,background:T.accent,borderRadius:2,marginTop:1}}/>}
             </button>
           ))}
         </div>
       </div>
 
       {/* MODALS */}
-      <Modal visible={showForm} onClose={()=>{setShowForm(false);setEditHab(null);}} t={t}>
-        <HabitForm hab={editHab} onSave={handleSaveHab} onDelete={handleDelHab} onClose={()=>{setShowForm(false);setEditHab(null);}} t={t}/>
+      <Modal visible={showForm} onClose={()=>{setShowForm(false);setEditHab(null);}}>
+        <HabitForm hab={editHab} onSave={handleSaveHab} onDelete={handleDelHab} onClose={()=>{setShowForm(false);setEditHab(null);}}/>
       </Modal>
-      <Modal visible={showMood} onClose={()=>{setShowMood(false);setMoodCeleb(false);}} t={t}>
-        <MoodPicker date={td} current={todayMood?.mood} note={todayMood?.note} isCeleb={moodCeleb} onSave={handleMood} onClose={()=>{setShowMood(false);setMoodCeleb(false);}} t={t}/>
+      <Modal visible={showMood} onClose={()=>{setShowMood(false);setMoodCeleb(false);}}>
+        <MoodPicker date={td} current={todayMood?.mood} note={todayMood?.note} isCeleb={moodCeleb} onSave={handleMood} onClose={()=>{setShowMood(false);setMoodCeleb(false);}}/>
       </Modal>
-      <Modal visible={!!showDay} onClose={()=>setShowDay(null)} t={t}>
-        {showDay&&<DayDetail date={showDay} habits={habits} logs={logs} mood={moods[showDay]} onClose={()=>setShowDay(null)} t={t}/>}
+      <Modal visible={!!showDay} onClose={()=>setShowDay(null)}>
+        {showDay&&<DayDetail date={showDay} habits={habits} logs={logs} mood={moods[showDay]} onClose={()=>setShowDay(null)}/>}
       </Modal>
-      <Modal visible={showSettings} onClose={()=>setShowSettings(false)} t={t}>
+      <Modal visible={showSettings} onClose={()=>setShowSettings(false)}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-          <h2 style={{margin:0,fontSize:18,fontWeight:700,fontFamily:t.font,color:t.text}}>Paramètres</h2>
-          <button onClick={()=>setShowSettings(false)} style={{background:t.border,border:"none",borderRadius:20,width:32,height:32,cursor:"pointer",color:t.text,fontSize:15}}>✕</button>
+          <h2 style={{margin:0,fontSize:18,fontWeight:700,color:T.text}}>Paramètres</h2>
+          <button onClick={()=>setShowSettings(false)} style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:20,width:32,height:32,cursor:"pointer",color:T.text,fontSize:15}}>✕</button>
         </div>
-        <div style={{marginBottom:22}}>
-          <div style={{fontSize:12,fontWeight:700,color:t.sub,textTransform:"uppercase",letterSpacing:1,marginBottom:12,fontFamily:t.ui}}>Thème</div>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {Object.values(THEMES).map(th=>(
-              <button key={th.id} onClick={()=>setTheme(th.id)} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 16px",borderRadius:14,cursor:"pointer",background:themeId===th.id?t.accent+"22":t.bg,border:`1.5px solid ${themeId===th.id?t.accent:t.border}`,transition:"all .2s"}}>
-                <div style={{width:32,height:32,borderRadius:8,background:th.accent,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{th.label.split(" ")[0]}</div>
-                <div style={{textAlign:"left"}}>
-                  <div style={{fontWeight:700,fontSize:15,color:t.text,fontFamily:t.font}}>{th.label.split(" ").slice(1).join(" ")}</div>
-                  <div style={{fontSize:12,color:t.sub,fontFamily:t.ui}}>{th.dark?"Thème sombre":"Thème clair"}</div>
-                </div>
-                {themeId===th.id&&<span style={{marginLeft:"auto",color:t.accent,fontSize:18}}>✓</span>}
-              </button>
+        {/* Thème saison */}
+        <div style={{marginBottom:20,background:"rgba(255,255,255,0.05)",borderRadius:14,padding:14,border:"1px solid rgba(255,255,255,0.1)"}}>
+          <div style={{fontSize:12,fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Thème actif</div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:32,height:32,borderRadius:8,background:T.accent,flexShrink:0}}/>
+            <div>
+              <div style={{fontWeight:600,color:T.text}}>{SEASON.label}</div>
+              <div style={{fontSize:12,color:T.sub}}>Thème saisonnier automatique</div>
+            </div>
+          </div>
+        </div>
+        {/* Stats méta-jeu */}
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:12,fontWeight:700,color:T.sub,textTransform:"uppercase",letterSpacing:1,marginBottom:12}}>Méta-jeu</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            {[{icon:"🔥",label:"Master Streak",value:masterStreak+" jour"+(masterStreak>1?"s":"")},{icon:"💎",label:"Cristaux",value:crystals+" bouclier"+(crystals>1?"s":"")},{icon:"⭐",label:"Journées parfaites",value:perfectDays+" total"},{icon:"📈",label:"Prochain cristal",value:`${perfectDays%7}/7`}].map(({icon,label,value})=>(
+              <div key={label} style={{background:"rgba(255,255,255,0.06)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"12px 10px",textAlign:"center"}}>
+                <div style={{fontSize:22,marginBottom:4}}>{icon}</div>
+                <div style={{fontWeight:700,fontSize:13,color:T.text}}>{value}</div>
+                <div style={{fontSize:10,color:T.sub,marginTop:2}}>{label}</div>
+              </div>
             ))}
           </div>
         </div>
-        <div>
-          <div style={{fontSize:12,fontWeight:700,color:t.sub,textTransform:"uppercase",letterSpacing:1,marginBottom:12,fontFamily:t.ui}}>Badges ({earnedBadges.length}/{BADGES.length})</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            {BADGES.map(b=>{
-              const earned=b.check(habits,logs,moods);
-              return<div key={b.id} style={{background:earned?t.accent+"15":t.bg,border:`1px solid ${earned?t.accent+"44":t.border}`,borderRadius:12,padding:"12px 10px",textAlign:"center",opacity:earned?1:0.4}}>
-                <div style={{fontSize:26,marginBottom:4,filter:earned?"none":"grayscale(1)"}}>{b.emoji}</div>
-                <div style={{fontWeight:700,fontSize:12,color:t.text,fontFamily:t.font}}>{b.label}</div>
-                <div style={{fontSize:10,color:t.sub,marginTop:2,fontFamily:t.ui}}>{b.desc}</div>
-              </div>;
-            })}
+        {/* Zen mode toggle */}
+        <div style={{background:"rgba(255,255,255,0.05)",borderRadius:14,padding:14,border:"1px solid rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontWeight:600,fontSize:14,color:T.text}}>Mode Zen</div>
+            <div style={{fontSize:12,color:T.sub,marginTop:2}}>Grille d'emojis épurée</div>
           </div>
+          <button onClick={()=>setZenMode(p=>{const n=!p;store.set(K.zenMode,n);return n;})} style={{width:46,height:26,borderRadius:13,border:"none",cursor:"pointer",background:zenMode?T.accent:"rgba(255,255,255,0.15)",position:"relative",transition:"background .25s",flexShrink:0}}>
+            <div style={{position:"absolute",top:3,width:20,height:20,borderRadius:"50%",background:"#fff",left:zenMode?22:3,transition:"left .25s"}}/>
+          </button>
         </div>
       </Modal>
     </div>
