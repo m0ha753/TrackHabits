@@ -10,7 +10,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <meta name="apple-mobile-web-app-title" content="Habitudes">
 
-    <!-- Chargement du Service Worker -->
     <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -21,17 +20,12 @@
     }
     </script>
 
-    <!-- Styles de repli pour les polices (offline) -->
     <style>
-      @font-face {
-        font-family: 'FallbackFont';
-        src: local('Arial');
-      }
+      @font-face { font-family: 'FallbackFont'; src: local('Arial'); }
       body {
         font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
         overscroll-behavior: none;
-        margin: 0;
-        padding: 0;
+        margin: 0; padding: 0;
       }
       * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
       @keyframes toastPop{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
@@ -41,9 +35,17 @@
       .page{animation:fadeUp .28s ease both}
       input,select,textarea{-webkit-appearance:none}
       ::-webkit-scrollbar{display:none}
+
+      /* Glissade vers le bas au moment de la complétion */
+      .habit-item {
+        transition: transform 0.42s cubic-bezier(.4,0,.2,1), opacity 0.42s ease;
+      }
+      .habit-item-completing {
+        transform: translateY(10px);
+        opacity: 0.45;
+      }
     </style>
 
-    <!-- Bibliothèques locales pour le mode hors-ligne -->
     <script src="react.production.min.js"></script>
     <script src="react-dom.production.min.js"></script>
     <script src="babel.min.js"></script>
@@ -51,11 +53,10 @@
 <body>
 <div id="root"></div>
 
-<!-- Ton code original (inchangé mais chargé via Babel local) -->
 <script type="text/babel">
 const {useState,useEffect,useCallback,useRef}=React;
 
-/* ─── STORAGE (localStorage) ─── */
+/* ─── STORAGE ─── */
 const K={habits:"ht5-habits",logs:"ht5-logs",moods:"ht5-moods",theme:"ht5-theme"};
 const store={
   get:k=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}},
@@ -68,7 +69,6 @@ const THEMES={
   neon:{id:"neon",label:"⚡ Neon",bg:"#0a0a0a",card:"#111111",border:"#1f1f1f",text:"#f0f0f0",sub:"#666666",muted:"#333333",accent:"#00ff88",tab:"#111111",tabBorder:"#1f1f1f",header:"#111111",font:"'Syne',sans-serif",ui:"'Syne',sans-serif",dark:true},
   organic:{id:"organic",label:"🌿 Organic",bg:"#f5f0eb",card:"#fffdf9",border:"#e8e0d5",text:"#2c2416",sub:"#8a7a6a",muted:"#b5a898",accent:"#7c9e6e",tab:"#fffdf9",tabBorder:"#e8e0d5",header:"#fffdf9",font:"'Fraunces',serif",ui:"'DM Sans',sans-serif",dark:false},
 };
-/* Sync browser theme-color to current theme */
 function syncThemeColor(bg){const m=document.getElementById("theme-color-meta");if(m)m.setAttribute("content",bg);}
 
 const HABIT_COLORS=["#f472b6","#a78bfa","#60a5fa","#34d399","#facc15","#fb923c","#f87171","#22d3ee"];
@@ -160,36 +160,40 @@ function Toast({msg,color}){
   return <div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:color,color:"#fff",padding:"10px 22px",borderRadius:30,fontWeight:700,fontSize:14,zIndex:9999,whiteSpace:"nowrap",boxShadow:"0 4px 20px #0004",animation:"toastPop .35s cubic-bezier(.34,1.56,.64,1)"}}>{msg}</div>;
 }
 
-/* ─── SWIPE CARD ─── */
-/* Snap: unités entières → pas = 1 valeur entière; L/km/€ → 0.1; autres → 1% */
+/* ─── SNAP ──────────────────────────────────────────────────────────────────
+   Sans objectif mesurable (goalQty falsy) → snap BINAIRE : < 50% = 0, ≥ 50% = 100
+   Avec objectif mesurable → snap sur les unités (comportement original)
+─── */
 const UNIT_INTEGER=["fois","pages","h","min","ml","m","kcal"];
-const UNIT_DECIMAL=["L","km","€",""];
-function snapPct(rawPct,hab){
-  const u=hab.goalUnit;
-  const qty=hab.goalQty;
-  if(!qty||u===undefined)return Math.round(rawPct);
+
+function snapPct(rawPct, hab){
+  /* Pas d'objectif → on passe de 0 à 100 en une seule fois */
+  if(!hab.goalQty) return rawPct >= 50 ? 100 : 0;
+
+  const u=hab.goalUnit, qty=hab.goalQty;
   if(UNIT_INTEGER.includes(u)){
-    /* On cale sur des entiers : chaque "1 unité" = 100/qty % */
     const step=100/qty;
     return Math.max(0,Math.min(100,Math.round(rawPct/step)*step));
   }
-  /* Décimal 0.1 : on cale sur des dixièmes de l'objectif */
-  const step=10/qty;/* 0.1 unité = step% */
+  const step=10/qty;
   return Math.max(0,Math.min(100,Math.round(rawPct/step)*step));
 }
 
-function SwipeCard({hab,pct,onPct,onEdit,t}){
+/* ─── SWIPE CARD ─── */
+function SwipeCard({hab, pct, onPct, onCommit, onEdit, t, completing}){
   const ref=useRef();
   const dragging=useRef(false);
   const startX=useRef(0);
   const startY=useRef(0);
-  const s=streak(hab,{});
+  const pendingPct=useRef(pct);
 
   const applyX=clientX=>{
     const rect=ref.current?.getBoundingClientRect();
     if(!rect)return;
     const raw=Math.max(0,Math.min(100,((clientX-rect.left)/rect.width)*100));
-    onPct(Math.round(snapPct(raw,hab)*10)/10);
+    const snapped=Math.round(snapPct(raw,hab)*10)/10;
+    pendingPct.current=snapped;
+    onPct(snapped);
   };
 
   const onPD=e=>{
@@ -197,6 +201,7 @@ function SwipeCard({hab,pct,onPct,onEdit,t}){
     startX.current=e.clientX;
     startY.current=e.clientY;
     dragging.current=false;
+    pendingPct.current=pct;
   };
   const onPM=e=>{
     const dx=Math.abs(e.clientX-startX.current);
@@ -207,22 +212,48 @@ function SwipeCard({hab,pct,onPct,onEdit,t}){
     }
     if(dragging.current)applyX(e.clientX);
   };
-  const onPU=e=>{if(dragging.current)applyX(e.clientX);dragging.current=false;};
+  /* Commit au relâchement → déclenche le tri */
+  const onPU=e=>{
+    if(dragging.current)applyX(e.clientX);
+    dragging.current=false;
+    onCommit(pendingPct.current);
+  };
 
-  const onEmojiClick=e=>{e.stopPropagation();onPct(100);};
+  /* Tap emoji/ring → toggle 0/100 et commit immédiatement */
+  const onEmojiClick=e=>{
+    e.stopPropagation();
+    const next=pct>=100?0:100;
+    onPct(next);
+    onCommit(next);
+  };
 
   const prog=fmtProgress(hab,pct);
+  const s=streak(hab,{});
+
   return(
-    <div ref={ref} onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU}
-      style={{position:"relative",borderRadius:18,overflow:"hidden",background:t.card,border:`1.5px solid ${pct===100?hab.color+"66":pct>0?hab.color+"33":t.border}`,cursor:"ew-resize",userSelect:"none",touchAction:"pan-y",transition:"border-color .3s",boxShadow:pct===100?`0 2px 20px ${hab.color}22`:"none"}}>
+    <div
+      ref={ref}
+      onPointerDown={onPD}
+      onPointerMove={onPM}
+      onPointerUp={onPU}
+      className={`habit-item${completing?" habit-item-completing":""}`}
+      style={{
+        position:"relative",
+        borderRadius:18,
+        overflow:"hidden",
+        background:t.card,
+        border:`1.5px solid ${pct===100?hab.color+"66":pct>0?hab.color+"33":t.border}`,
+        cursor:"ew-resize",
+        userSelect:"none",
+        touchAction:"pan-y",
+        boxShadow:pct===100?`0 2px 20px ${hab.color}22`:"none",
+      }}>
       <div style={{position:"absolute",inset:0,width:`${pct}%`,background:`linear-gradient(90deg,${hab.color}25,${hab.color}10)`,transition:"width .15s",pointerEvents:"none"}}/>
       <div style={{position:"relative",padding:"14px 16px",display:"flex",alignItems:"center",gap:14}}>
-        {/* Ring cliquable → 100% */}
         <div data-ctrl="1" onPointerDown={e=>e.stopPropagation()} onClick={onEmojiClick}
           style={{position:"relative",width:42,height:42,flexShrink:0,cursor:"pointer"}}
           title="Marquer comme terminé">
           <Ring pct={pct} color={pct>0?hab.color:t.muted} size={42} stroke={3.5} t={t} hideText/>
-          {/* Emoji centré dans le ring, remplace le % */}
           <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
             {pct===100
               ? <span style={{fontSize:16}}>✓</span>
@@ -233,7 +264,13 @@ function SwipeCard({hab,pct,onPct,onEdit,t}){
           <div style={{fontWeight:700,fontSize:15,color:pct===100?hab.color:t.text,fontFamily:t.font,transition:"color .3s",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{hab.name}</div>
           <div style={{fontSize:12,color:t.sub,marginTop:3,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             {s>0&&<span style={{color:hab.color,fontWeight:600}}>🔥 {s}j</span>}
-            {prog?<span style={{color:pct>0?hab.color:t.sub}}>{prog}</span>:pct===100?<span style={{color:hab.color}}>✓ Terminé !</span>:pct>0?<span style={{color:hab.color}}>{pct}%</span>:<span>← Glisse pour avancer</span>}
+            {prog
+              ? <span style={{color:pct>0?hab.color:t.sub}}>{prog}</span>
+              : pct===100
+                ? <span style={{color:hab.color}}>✓ Terminé !</span>
+                : pct>0
+                  ? <span style={{color:hab.color}}>{pct}%</span>
+                  : <span>← Glisse pour terminer</span>}
           </div>
         </div>
         <div data-ctrl="1" style={{pointerEvents:"all"}} onPointerDown={e=>e.stopPropagation()}>
@@ -442,7 +479,6 @@ function YearCalendar({year,habits,logs,moods,onDay,t}){
 function WeekView({habits,logs,moods,onEdit,onToggle,t}){
   const td=today();
   const weekDays=(()=>{const days=[],now=new Date(),d=(now.getDay()+6)%7;for(let i=0;i<7;i++){const x=new Date(now);x.setDate(now.getDate()-d+i);days.push(x.toISOString().split("T")[0]);}return days;})();
-  const last7=lastN(7);
   return(
     <>
       <div style={{display:"flex",justifyContent:"space-between",marginBottom:16,gap:3}}>
@@ -481,19 +517,94 @@ function WeekView({habits,logs,moods,onEdit,onToggle,t}){
   );
 }
 
-/* ─── DRAG LIST ─── */
-function DragList({items,onReorder,renderItem}){
-  const[drag,setDrag]=useState(null);const[over,setOver]=useState(null);
-  const onDS=(e,i)=>{setDrag(i);e.dataTransfer.effectAllowed="move";};
-  const onDO=(e,i)=>{e.preventDefault();setOver(i);};
-  const onDrop=(e,i)=>{e.preventDefault();if(drag===null||drag===i){setDrag(null);setOver(null);return;}const arr=[...items];const[it]=arr.splice(drag,1);arr.splice(i,0,it);onReorder(arr);setDrag(null);setOver(null);};
+/* ─── SORTED HABIT LIST ──────────────────────────────────────────────────────
+   Ordre d'affichage :
+     • Non terminées en haut, dans l'ordre d'ajout (createdAt ou id)
+     • Terminées en bas, dans l'ordre d'ajout
+   Le re-tri ne se déclenche qu'au COMMIT (relâchement slide ou tap emoji),
+   avec une animation de glissade vers le bas pour la tâche qui vient d'être complétée.
+─── */
+function SortedHabitList({habits, localProg, onPct, onCommit, onEdit, t}){
+  /* On garde l'ordre d'ajout stable comme référence */
+  const addOrder=useRef(habits.map(h=>h.id));
+
+  /* orderedIds : ordre actuellement affiché */
+  const[orderedIds, setOrderedIds]=useState(()=>{
+    const done=habits.filter(h=>(localProg[h.id]||0)>=100).map(h=>h.id);
+    const notDone=habits.filter(h=>(localProg[h.id]||0)<100).map(h=>h.id);
+    return [...notDone,...done];
+  });
+
+  /* IDs en cours d'animation glissade */
+  const[completingIds, setCompletingIds]=useState(new Set());
+
+  /* Sync quand habitudes ajoutées/supprimées */
+  useEffect(()=>{
+    const currentIds=new Set(habits.map(h=>h.id));
+    /* Nouvelles habitudes → on les ajoute en tête de groupe non-terminé */
+    const newHabs=habits.filter(h=>!addOrder.current.includes(h.id));
+    if(newHabs.length){
+      newHabs.forEach(h=>addOrder.current.push(h.id));
+      setOrderedIds(prev=>{
+        const newIds=newHabs.map(h=>h.id);
+        const existing=prev.filter(id=>currentIds.has(id));
+        const done=existing.filter(id=>(localProg[id]||0)>=100);
+        const notDone=existing.filter(id=>(localProg[id]||0)<100);
+        return [...newIds,...notDone,...done];
+      });
+    }
+    /* Suppressions */
+    setOrderedIds(prev=>prev.filter(id=>currentIds.has(id)));
+  },[habits]);
+
+  const habMap=Object.fromEntries(habits.map(h=>[h.id,h]));
+
+  const handleCommit=useCallback((habId, pct)=>{
+    onCommit(habId, pct);
+
+    if(pct>=100){
+      /* 1. Anime la glissade */
+      setCompletingIds(prev=>new Set([...prev,habId]));
+      /* 2. Après l'animation : re-trie */
+      setTimeout(()=>{
+        setOrderedIds(prev=>{
+          const notDone=prev.filter(id=>id!==habId&&(localProg[id]||0)<100);
+          const done=prev.filter(id=>id===habId||(localProg[id]||0)>=100);
+          return [...notDone,...done];
+        });
+        setCompletingIds(prev=>{const s=new Set(prev);s.delete(habId);return s;});
+      },430);
+    } else {
+      /* Décochée → remonte immédiatement en tête du groupe non-terminé */
+      setOrderedIds(prev=>{
+        const rest=prev.filter(id=>id!==habId);
+        const done=rest.filter(id=>(localProg[id]||0)>=100);
+        const notDone=rest.filter(id=>(localProg[id]||0)<100);
+        return [habId,...notDone,...done];
+      });
+    }
+  },[onCommit, localProg]);
+
+  const visible=orderedIds.filter(id=>habMap[id]);
+
   return(
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
-      {items.map((item,i)=>(
-        <div key={item.id} draggable onDragStart={e=>onDS(e,i)} onDragOver={e=>onDO(e,i)} onDrop={e=>onDrop(e,i)} onDragEnd={()=>{setDrag(null);setOver(null);}} style={{opacity:drag===i?0.4:1,transform:over===i&&drag!==i?"translateY(-3px)":"translateY(0)",transition:"transform .15s,opacity .15s"}}>
-          {renderItem(item,i)}
-        </div>
-      ))}
+      {visible.map(id=>{
+        const h=habMap[id];
+        const pct=localProg[h.id]||0;
+        return(
+          <SwipeCard
+            key={h.id}
+            hab={h}
+            pct={pct}
+            onPct={p=>onPct(h.id,p)}
+            onCommit={p=>handleCommit(h.id,p)}
+            onEdit={()=>onEdit(h)}
+            t={t}
+            completing={completingIds.has(h.id)}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -514,7 +625,6 @@ function App(){
   const[showDay,setShowDay]=useState(null);
   const[showSettings,setShowSettings]=useState(false);
   const[toast,setToast]=useState(null);
-  const[newId,setNewId]=useState(null);
   const[confetti,setConfetti]=useState(false);
   const[localProg,setLocalProg]=useState({});
   const syncRef=useRef({});
@@ -536,13 +646,19 @@ function App(){
   const saveHabits=useCallback(h=>{setHabits(h);store.set(K.habits,h);},[]);
   const saveMoods=useCallback(m=>{setMoods(m);store.set(K.moods,m);},[]);
 
+  /* Mise à jour en temps réel pendant le drag (pas de persistance) */
   const handleProg=useCallback((habId,pct)=>{
+    setLocalProg(prev=>({...prev,[habId]:pct}));
+  },[]);
+
+  /* Commit au relâchement → persistance dans les logs */
+  const handleCommit=useCallback((habId,pct)=>{
     setLocalProg(prev=>{
       const next={...prev,[habId]:pct};
       clearTimeout(syncRef.current[habId]);
       syncRef.current[habId]=setTimeout(()=>{
         setLogs(prevL=>{const nl={...prevL,[today()]:{...prevL[today()],...next}};store.set(K.logs,nl);return nl;});
-      },300);
+      },100);
       return next;
     });
   },[]);
@@ -558,7 +674,7 @@ function App(){
   const handleSaveHab=hab=>{
     let upd;
     if(editHab){upd=habits.map(h=>h.id===editHab.id?{...h,...hab}:h);pop("✏️ Modifiée !",hab.color);}
-    else{const n={id:Date.now().toString(),...hab,createdAt:today()};upd=[...habits,n];setNewId(n.id);setTimeout(()=>setNewId(null),1400);pop("🌱 Créée !",hab.color);}
+    else{const n={id:Date.now().toString(),...hab,createdAt:today()};upd=[...habits,n];pop("🌱 Créée !",hab.color);}
     saveHabits(upd);setShowForm(false);setEditHab(null);setTab("today");
   };
 
@@ -584,7 +700,6 @@ function App(){
   const allDone=todayHabs.length>0&&todayHabs.every(h=>(localProg[h.id]||0)>=100);
   const todayMood=moods[td];
   const earnedBadges=BADGES.filter(b=>b.check(habits,logs,moods));
-  const isEvening=new Date().getHours()>=18;
 
   if(!loaded)return <div style={{background:THEMES.nebula.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:THEMES.nebula.sub,fontFamily:"monospace"}}>Chargement…</div></div>;
 
@@ -634,9 +749,14 @@ function App(){
                 <p style={{fontFamily:t.font}}>Rien de prévu aujourd'hui !</p>
               </div>
             ):(
-              <DragList items={[...todayHabs].sort((a,b)=>{const aDone=(localProg[a.id]||0)>=100,bDone=(localProg[b.id]||0)>=100;if(aDone!==bDone)return aDone?1:-1;return a.name.localeCompare(b.name,"fr");})} onReorder={ordered=>{const ids=ordered.map(h=>h.id);saveHabits([...ordered,...habits.filter(h=>!ids.includes(h.id))]);}} renderItem={h=>(
-                <SwipeCard key={h.id} hab={h} pct={localProg[h.id]||0} onPct={p=>handleProg(h.id,p)} onEdit={()=>{setEditHab(h);setShowForm(true);}} t={t}/>
-              )}/>
+              <SortedHabitList
+                habits={todayHabs}
+                localProg={localProg}
+                onPct={handleProg}
+                onCommit={handleCommit}
+                onEdit={h=>{setEditHab(h);setShowForm(true);}}
+                t={t}
+              />
             )}
             {todayHabs.length>0&&!allDone&&!todayMood&&(
               <button onClick={()=>{setMoodCeleb(false);setShowMood(true);}} style={{marginTop:12,width:"100%",padding:"10px",background:"transparent",border:`1px solid ${t.border}`,borderRadius:12,color:t.sub,fontSize:13,cursor:"pointer",fontFamily:t.ui}}>
