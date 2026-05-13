@@ -33,7 +33,7 @@
     @keyframes streakFlameIn { 0%{opacity:0;transform:scale(0.3) translateY(40px)} 60%{transform:scale(1.15) translateY(-8px)} 100%{opacity:1;transform:scale(1) translateY(0)} }
     @keyframes streakNumPop { 0%{opacity:0;transform:scale(0.5)} 70%{transform:scale(1.2)} 100%{opacity:1;transform:scale(1)} }
     @keyframes streakOut { from{opacity:1;transform:scale(1)} to{opacity:0;transform:scale(0.7)} }
-    @keyframes countUp { 0%{opacity:0;transform:translateY(2px)} 100%{opacity:1;transform:translateY(0)} }
+    @keyframes countUp { 0%{opacity:0;transform:translateY(10px)} 100%{opacity:1;transform:translateY(0)} }
     .habit-new { animation:popIn .55s cubic-bezier(.34,1.56,.64,1) both }
     .page { animation:fadeUp .28s ease both }
     input,select,textarea { -webkit-appearance:none; }
@@ -137,22 +137,19 @@ function FlameStreak({masterStreak,T}){
   );
 }
 
-/* ─── ANIMATION STREAK OVERLAY (remplace confetti) ─── */
+/* ─── ANIMATION STREAK OVERLAY ─── */
 function StreakCelebration({newStreak,onDone,T}){
   const fc=T.flame||"#ff7030";
-  const [phase,setPhase]=useState("enter"); // enter -> countup -> exit
+  const [phase,setPhase]=useState("enter");
   const [displayNum,setDisplayNum]=useState(newStreak-1);
   const [numKey,setNumKey]=useState(0);
   const innerC="rgba(255,255,180,0.85)";
 
   useEffect(()=>{
-    // Phase 1: flamme entre (0.7s)
-    // Phase 2: après 1s, chiffre monte (newStreak-1 -> newStreak)
     const t1=setTimeout(()=>{
       setDisplayNum(newStreak);
       setNumKey(k=>k+1);
     },1100);
-    // Phase 3: exit après 2.8s total
     const t2=setTimeout(()=>{
       setPhase("exit");
       setTimeout(onDone,400);
@@ -176,37 +173,21 @@ function StreakCelebration({newStreak,onDone,T}){
         cursor:"pointer",
       }}
     >
-      {/* Flamme grande */}
       <div className="streak-flame-enter" style={{marginBottom:8}}>
         <div className="flame-big">
           <FlameSVG size={120} color={fc} innerColor={innerC}/>
         </div>
       </div>
-
-      {/* Chiffre avec animation counter */}
       <div key={numKey} className="streak-num-pop" style={{
-        fontSize:72,
-        fontWeight:900,
-        color:"#fff",
-        lineHeight:1,
-        fontFamily:"'DM Sans',sans-serif",
-        letterSpacing:"-3px",
+        fontSize:72,fontWeight:900,color:"#fff",lineHeight:1,
+        fontFamily:"'DM Sans',sans-serif",letterSpacing:"-3px",
         textShadow:`0 0 40px ${fc}80`,
       }}>
         {displayNum}
       </div>
-
-      {/* Libellé */}
-      <div style={{
-        marginTop:10,
-        fontSize:18,
-        fontWeight:600,
-        color:"rgba(255,255,255,0.85)",
-        letterSpacing:"0.5px",
-      }}>
+      <div style={{marginTop:10,fontSize:18,fontWeight:600,color:"rgba(255,255,255,0.85)",letterSpacing:"0.5px"}}>
         {newStreak===1?"Premier jour ! 🎉":`jour${newStreak>1?"s":""} de suite 🔥`}
       </div>
-
       <div style={{marginTop:24,fontSize:12,color:"rgba(255,255,255,0.4)"}}>
         Tape pour continuer
       </div>
@@ -278,7 +259,7 @@ function ZenMode({habits,localProg,onPct,onCommit,T}){
   );
 }
 
-/* ─── SWIPE CARD ─── */
+/* ─── SWIPE CARD — latence supprimée ─── */
 function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs}){
   const EMERALD=T.emerald;
   const ref=useRef();
@@ -286,30 +267,93 @@ function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs}){
   const startX=useRef(0);
   const startY=useRef(0);
   const pendingPct=useRef(pct);
-  const applyX=clientX=>{const rect=ref.current?.getBoundingClientRect();if(!rect)return;const raw=Math.max(0,Math.min(100,((clientX-rect.left)/rect.width)*100));const snapped=Math.round(snapPct(raw,hab)*10)/10;pendingPct.current=snapped;onPct(snapped);};
-  const onPD=e=>{if(e.target.closest("[data-ctrl]"))return;startX.current=e.clientX;startY.current=e.clientY;dragging.current=false;pendingPct.current=pct;};
-  const onPM=e=>{const dx=Math.abs(e.clientX-startX.current),dy=Math.abs(e.clientY-startY.current);if(!dragging.current){if(dy>10&&dy>dx)return;if(dx>10){dragging.current=true;ref.current?.setPointerCapture(e.pointerId);}}if(dragging.current)applyX(e.clientX);};
-  const onPU=e=>{if(dragging.current)applyX(e.clientX);dragging.current=false;onCommit(pendingPct.current);};
-  const onEmojiClick=e=>{e.stopPropagation();const next=pct>=100?0:100;onPct(next);onCommit(next);};
-  const prog=fmtProgress(hab,pct);
-  const done=pct>=100;
+  // State local : mise à jour immédiate pendant le drag, sans re-render parent
+  const [displayPct,setDisplayPct]=useState(pct);
+
+  // Sync si pct change depuis l'extérieur (ex: reset)
+  useEffect(()=>{
+    if(!dragging.current) setDisplayPct(pct);
+  },[pct]);
+
+  const applyX=clientX=>{
+    const rect=ref.current?.getBoundingClientRect();
+    if(!rect)return;
+    const raw=Math.max(0,Math.min(100,((clientX-rect.left)/rect.width)*100));
+    const snapped=Math.round(snapPct(raw,hab)*10)/10;
+    pendingPct.current=snapped;
+    setDisplayPct(snapped); // mise à jour locale instantanée
+    // on ne remonte PAS au parent pendant le glissement
+  };
+
+  const onPD=e=>{
+    if(e.target.closest("[data-ctrl]"))return;
+    startX.current=e.clientX;
+    startY.current=e.clientY;
+    dragging.current=false;
+    pendingPct.current=displayPct;
+  };
+
+  const onPM=e=>{
+    const dx=Math.abs(e.clientX-startX.current),dy=Math.abs(e.clientY-startY.current);
+    if(!dragging.current){
+      if(dy>10&&dy>dx)return;
+      if(dx>10){dragging.current=true;ref.current?.setPointerCapture(e.pointerId);}
+    }
+    if(dragging.current)applyX(e.clientX);
+  };
+
+  const onPU=e=>{
+    if(dragging.current)applyX(e.clientX);
+    dragging.current=false;
+    // Une seule remontée au parent, au relâchement
+    onPct(pendingPct.current);
+    onCommit(pendingPct.current);
+  };
+
+  const onEmojiClick=e=>{
+    e.stopPropagation();
+    const next=pct>=100?0:100;
+    setDisplayPct(next);
+    onPct(next);
+    onCommit(next);
+  };
+
+  const prog=fmtProgress(hab,displayPct);
+  const done=displayPct>=100;
   const s=streak(hab,logs||{});
+
   return(
     <div ref={ref} onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU}
-      style={{position:"relative",borderRadius:14,overflow:"hidden",background:done?`${EMERALD}08`:T.card,backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",border:`1px solid ${done?EMERALD+"44":T.border}`,cursor:"ew-resize",userSelect:"none",touchAction:"pan-y",transition:"box-shadow .3s,border .3s,background .3s",boxShadow:done?"0 1px 12px rgba(0,0,0,0.04)":"0 1px 6px rgba(0,0,0,0.03)"}}>
-      <div style={{position:"absolute",inset:0,width:`${pct}%`,background:`${EMERALD}09`,transition:"width .15s",pointerEvents:"none"}}/>
+      style={{position:"relative",borderRadius:14,overflow:"hidden",
+        background:done?`${EMERALD}08`:T.card,
+        backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",
+        border:`1px solid ${done?EMERALD+"44":T.border}`,
+        cursor:"ew-resize",userSelect:"none",touchAction:"pan-y",
+        transition:"box-shadow .3s,border .3s,background .3s",
+        boxShadow:done?"0 1px 12px rgba(0,0,0,0.04)":"0 1px 6px rgba(0,0,0,0.03)"}}>
+      {/* Barre de progression : sans transition pour réponse instantanée */}
+      <div style={{position:"absolute",inset:0,width:`${displayPct}%`,background:`${EMERALD}09`,pointerEvents:"none"}}/>
       <div style={{position:"relative",padding:"13px 14px",display:"flex",alignItems:"center",gap:12}}>
-        <div data-ctrl="1" onPointerDown={e=>e.stopPropagation()} onClick={onEmojiClick} style={{position:"relative",width:40,height:40,flexShrink:0,cursor:"pointer"}}>
-          <Ring pct={pct} size={40} stroke={3} hideText T={T}/>
+        <div data-ctrl="1" onPointerDown={e=>e.stopPropagation()} onClick={onEmojiClick}
+          style={{position:"relative",width:40,height:40,flexShrink:0,cursor:"pointer"}}>
+          <Ring pct={displayPct} size={40} stroke={3} hideText T={T}/>
           <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
             <span style={{fontSize:15}}>{done?"✓":hab.emoji}</span>
           </div>
         </div>
         <div style={{flex:1,minWidth:0,pointerEvents:"none"}}>
-          <div style={{fontWeight:600,fontSize:14,color:done?EMERALD:T.text,transition:"color .3s",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{hab.name}</div>
+          <div style={{fontWeight:600,fontSize:14,color:done?EMERALD:T.text,transition:"color .3s",
+            whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{hab.name}</div>
           <div style={{fontSize:11,color:T.sub,marginTop:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             {s>0&&<span style={{color:done?EMERALD:T.sub,fontWeight:500}}>🔥 {s}j</span>}
-            {prog?<span style={{color:pct>0?EMERALD:T.sub}}>{prog}</span>:done?<span style={{color:EMERALD}}>Terminé</span>:pct>0?<span style={{color:T.sub}}>{Math.round(pct)}%</span>:<span style={{color:T.muted}}>← glisse</span>}
+            {prog
+              ?<span style={{color:displayPct>0?EMERALD:T.sub}}>{prog}</span>
+              :done
+                ?<span style={{color:EMERALD}}>Terminé</span>
+                :displayPct>0
+                  ?<span style={{color:T.sub}}>{Math.round(displayPct)}%</span>
+                  :<span style={{color:T.muted}}>← glisse</span>
+            }
           </div>
         </div>
         <div data-ctrl="1" style={{pointerEvents:"all"}} onPointerDown={e=>e.stopPropagation()}>
@@ -618,7 +662,7 @@ function App(){
   const[showDay,setShowDay]=useState(null);
   const[showSettings,setShowSettings]=useState(false);
   const[toast,setToast]=useState(null);
-  const[streakCeleb,setStreakCeleb]=useState(null); // null or {newStreak}
+  const[streakCeleb,setStreakCeleb]=useState(null);
   const[localProg,setLocalProg]=useState({});
   const[zenMode,setZenMode]=useState(false);
   const[themeKey,setThemeKey]=useState(DEFAULT_THEME);
@@ -639,7 +683,6 @@ function App(){
     if(m)setMoods(m);
     setMasterStreak(ms);setPerfectDays(pd);setZenMode(zen);setThemeKey(savedTheme);
 
-    // Vérification au chargement : reset si hier raté
     const lastCheck=store.get(K.lastCheck)||"";
     const td=today();
     if(lastCheck!==td){
@@ -651,7 +694,6 @@ function App(){
       if(yHabs.length>0){
         const allDoneYest=yHabs.every(x=>(logs2[yesterday]?.[x.id]||0)>=100);
         if(!allDoneYest&&ms>0){
-          // Journée hier ratée → reset streak
           setMasterStreak(0);store.set(K.masterStreak,0);
           setTimeout(()=>setToast({msg:"Série perdue… à demain 💪",color:"#f87171"}),400);
         }
@@ -682,7 +724,6 @@ function App(){
 
   const switchTheme=useCallback((key)=>{setThemeKey(key);store.set(K.theme,key);},[]);
 
-  // Détection "toutes tâches finies" → streak +1 immédiat (protégé par streakDate)
   useEffect(()=>{
     const td=today(),th=habits.filter(h=>scheduled(h,td));
     if(!th.length)return;
@@ -690,8 +731,6 @@ function App(){
 
     if(allDone&&!prevAllDone.current){
       prevAllDone.current=true;
-
-      // Protection anti-double: vérifier si streak déjà incrémenté aujourd'hui
       const streakDate=store.get(K.streakDate)||"";
       if(streakDate!==td){
         store.set(K.streakDate,td);
@@ -701,12 +740,10 @@ function App(){
           const newPd=perfectDays+1;
           setPerfectDays(newPd);
           store.set(K.perfectDays,newPd);
-          // Déclencher l'animation célébration
           setStreakCeleb({newStreak:newMs});
           return newMs;
         });
       } else {
-        // Déjà incrémenté aujourd'hui, juste montrer mood
         setMoodCeleb(true);
         setShowMood(true);
       }
@@ -750,7 +787,6 @@ function App(){
       <div className="blob blob2" style={{background:T.blob2}}/>
       <div className="blob blob3" style={{background:T.blob3}}/>
 
-      {/* STREAK CELEBRATION (remplace confetti) */}
       {streakCeleb&&(
         <StreakCelebration
           newStreak={streakCeleb.newStreak}
