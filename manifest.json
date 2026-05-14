@@ -2,7 +2,7 @@
   "short_name": "TrackHabits",
   "name": "TrackHabits - Suivi Quotidien",
   "description": "Une application simple pour suivre ses habitudes au quotidien, même hors-ligne.",
-  "icons": [],
+  "icons": [{ "src": "icon.png", "sizes": "512x512", "type": "image/png" }],
   "start_url": "./index.html",
   "background_color": "#0d0d14",
   "display": "standalone",
