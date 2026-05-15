@@ -26,24 +26,66 @@
     @keyframes toastPop { from{opacity:0;transform:translateX(-50%) translateY(-10px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
     @keyframes popIn { 0%{opacity:0;transform:scale(.6) translateY(14px)} 65%{transform:scale(1.07)} 100%{opacity:1;transform:scale(1)} }
     @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
-    @keyframes floatBlob { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(40px,-30px) scale(1.08)} 66%{transform:translate(-20px,40px) scale(0.95)} }
-    @keyframes floatBlob2 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(-50px,30px) scale(1.05)} 66%{transform:translate(30px,-40px) scale(0.97)} }
-    @keyframes floatBlob3 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(20px,50px) scale(1.1)} }
     @keyframes flamePulseSmall { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
     @keyframes flamePulseBig { 0%,100%{transform:scale(1) rotate(-2deg)} 50%{transform:scale(1.12) rotate(2deg)} }
     @keyframes streakOverlayIn { from{opacity:0} to{opacity:1} }
     @keyframes streakFlameIn { 0%{opacity:0;transform:scale(0.3) translateY(40px)} 60%{transform:scale(1.15) translateY(-8px)} 100%{opacity:1;transform:scale(1) translateY(0)} }
     @keyframes streakNumPop { 0%{opacity:0;transform:scale(0.5)} 70%{transform:scale(1.2)} 100%{opacity:1;transform:scale(1)} }
     @keyframes streakOut { from{opacity:1;transform:scale(1)} to{opacity:0;transform:scale(0.7)} }
-    @keyframes countUp { 0%{opacity:0;transform:translateY(10px)} 100%{opacity:1;transform:translateY(0)} }
     @keyframes inputSlideIn { from{opacity:0;transform:scaleX(0.92)} to{opacity:1;transform:scaleX(1)} }
+
+    /* ── Sakura petals ── */
+    @keyframes petalFall {
+      0%   { transform: translateY(-60px) translateX(0px) rotate(0deg); opacity: 0; }
+      10%  { opacity: 1; }
+      90%  { opacity: 0.7; }
+      100% { transform: translateY(110vh) translateX(var(--drift)) rotate(var(--spin)); opacity: 0; }
+    }
+    .petal {
+      position: fixed; pointer-events: none; z-index: 0;
+      width: var(--size); height: var(--size);
+      border-radius: 50% 0 50% 0;
+      background: var(--color);
+      animation: petalFall var(--dur) var(--delay) linear infinite;
+      left: var(--left); top: -60px;
+      opacity: 0;
+    }
+
+    /* ── Dusk stars ── */
+    @keyframes twinkle {
+      0%,100% { opacity: var(--base-op); transform: scale(1); }
+      50%      { opacity: 1; transform: scale(1.4); }
+    }
+    .star {
+      position: fixed; pointer-events: none; z-index: 0;
+      width: var(--sz); height: var(--sz);
+      border-radius: 50%;
+      background: var(--col);
+      left: var(--x); top: var(--y);
+      animation: twinkle var(--dur) var(--delay) ease-in-out infinite;
+      opacity: var(--base-op);
+    }
+
+    /* ── Sepia dust ── */
+    @keyframes dustFloat {
+      0%   { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
+      20%  { opacity: var(--op); }
+      80%  { opacity: var(--op); }
+      100% { transform: translateY(var(--dy)) translateX(var(--dx)) scale(var(--sc)); opacity: 0; }
+    }
+    .dust {
+      position: fixed; pointer-events: none; z-index: 0;
+      width: var(--sz); height: var(--sz);
+      border-radius: 50%;
+      background: var(--col);
+      left: var(--x); top: var(--y);
+      animation: dustFloat var(--dur) var(--delay) ease-in-out infinite;
+      opacity: 0;
+    }
+
     .habit-new { animation:popIn .55s cubic-bezier(.34,1.56,.64,1) both }
     .page { animation:fadeUp .28s ease both }
     input,select,textarea { -webkit-appearance:none; }
-    .blob { position:fixed; border-radius:50%; filter:blur(90px); pointer-events:none; z-index:0; }
-    .blob1 { width:320px; height:320px; top:-80px; left:-100px; animation:floatBlob 22s ease-in-out infinite; }
-    .blob2 { width:260px; height:260px; bottom:60px; right:-80px; animation:floatBlob2 28s ease-in-out infinite; }
-    .blob3 { width:180px; height:180px; top:50%; left:35%; animation:floatBlob3 32s ease-in-out infinite; }
     .flame-small { animation: flamePulseSmall 2.4s ease-in-out infinite; transform-origin: 50% 85%; display:inline-block; }
     .flame-big { animation: flamePulseBig 1.8s ease-in-out infinite; transform-origin: 50% 85%; }
     .streak-overlay { animation: streakOverlayIn 0.3s ease both; }
@@ -61,37 +103,180 @@
 <script type="text/babel">
 const {useState,useEffect,useCallback,useRef,useMemo}=React;
 
-const K={habits:"ht6-habits",logs:"ht6-logs",moods:"ht6-moods",masterStreak:"ht6-ms",perfectDays:"ht6-pd",lastCheck:"ht6-lc",zenMode:"ht6-zen",theme:"ht6-theme",streakDate:"ht6-sd"};
+const K={
+  habits:"ht7-habits",logs:"ht7-logs",moods:"ht7-moods",
+  masterStreak:"ht7-ms",bestStreak:"ht7-bs",perfectDays:"ht7-pd",
+  lastCheck:"ht7-lc",zenMode:"ht7-zen",theme:"ht7-theme",
+  streakDate:"ht7-sd",overCount:"ht7-oc"
+};
 const store={
   get:k=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}},
   set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}},
 };
 
-function getSeason(month){
-  if(month<=1||month===11) return "winter";
-  if(month<=4) return "spring";
-  if(month<=7) return "summer";
-  return "autumn";
-}
+/* ─── THEMES ─── */
+const ALL_THEMES=[
+  {key:"blanc",label:"Blanc"},
+  {key:"noir",label:"Noir"},
+  {key:"sakura",label:"Sakura"},
+  {key:"dusk",label:"Dusk"},
+  {key:"sepia",label:"Sépia"},
+];
+const DEFAULT_THEME="blanc";
 
-const SEASONAL_THEMES={
-  winter:{bg:"#f5f6fa",headerBg:"rgba(245,246,250,0.85)",card:"rgba(255,255,255,0.8)",border:"rgba(100,120,180,0.12)",text:"#1a1c2e",sub:"rgba(26,28,46,0.45)",muted:"rgba(26,28,46,0.12)",accent:"#4f72c4",accentLight:"rgba(79,114,196,0.12)",blob1:"rgba(147,174,235,0.18)",blob2:"rgba(100,130,210,0.12)",blob3:"rgba(180,200,240,0.10)",emerald:"#2a7d5a",flame:"#e88040",label:"Hiver ❄️",dark:false},
-  spring:{bg:"#f6f9f4",headerBg:"rgba(246,249,244,0.85)",card:"rgba(255,255,255,0.8)",border:"rgba(80,150,80,0.12)",text:"#1a2418",sub:"rgba(26,36,24,0.45)",muted:"rgba(26,36,24,0.12)",accent:"#3d8b5c",accentLight:"rgba(61,139,92,0.12)",blob1:"rgba(140,200,140,0.18)",blob2:"rgba(100,180,100,0.11)",blob3:"rgba(180,220,160,0.09)",emerald:"#2a7d4a",flame:"#e87030",label:"Printemps 🌸",dark:false},
-  summer:{bg:"#fffbf0",headerBg:"rgba(255,251,240,0.88)",card:"rgba(255,255,255,0.85)",border:"rgba(220,160,0,0.16)",text:"#2a1e00",sub:"rgba(42,30,0,0.48)",muted:"rgba(42,30,0,0.13)",accent:"#d4850a",accentLight:"rgba(212,133,10,0.13)",blob1:"rgba(255,210,60,0.22)",blob2:"rgba(255,180,30,0.14)",blob3:"rgba(255,235,120,0.12)",emerald:"#1e7d40",flame:"#e84a08",label:"Été ☀️",dark:false},
-  autumn:{bg:"#fdf6f0",headerBg:"rgba(253,246,240,0.88)",card:"rgba(255,255,255,0.82)",border:"rgba(160,60,20,0.16)",text:"#2c1206",sub:"rgba(44,18,6,0.48)",muted:"rgba(44,18,6,0.13)",accent:"#b83a10",accentLight:"rgba(184,58,16,0.12)",blob1:"rgba(210,100,40,0.18)",blob2:"rgba(185,70,20,0.13)",blob3:"rgba(230,140,70,0.11)",emerald:"#2e6e38",flame:"#dd4008",label:"Automne 🍂",dark:false},
-  light:{bg:"#fafafa",headerBg:"rgba(250,250,250,0.88)",card:"rgba(255,255,255,0.9)",border:"rgba(0,0,0,0.08)",text:"#111111",sub:"rgba(17,17,17,0.42)",muted:"rgba(17,17,17,0.1)",accent:"#111111",accentLight:"rgba(17,17,17,0.07)",blob1:"rgba(0,0,0,0)",blob2:"rgba(0,0,0,0)",blob3:"rgba(0,0,0,0)",emerald:"#1a7a4a",flame:"#e85a10",label:"Clair ☀️",dark:false},
-  dark:{bg:"#111113",headerBg:"rgba(17,17,19,0.88)",card:"rgba(255,255,255,0.05)",border:"rgba(255,255,255,0.08)",text:"#eeeeee",sub:"rgba(238,238,238,0.42)",muted:"rgba(238,238,238,0.1)",accent:"#dddddd",accentLight:"rgba(255,255,255,0.07)",blob1:"rgba(0,0,0,0)",blob2:"rgba(0,0,0,0)",blob3:"rgba(0,0,0,0)",emerald:"#34c877",flame:"#ff7030",label:"Sombre 🌙",dark:true},
+const THEMES={
+  blanc:{
+    bg:"#fafafa",headerBg:"rgba(250,250,250,0.92)",card:"rgba(255,255,255,0.9)",
+    border:"rgba(0,0,0,0.08)",text:"#111111",sub:"rgba(17,17,17,0.45)",
+    muted:"rgba(17,17,17,0.12)",accent:"#111111",accentLight:"rgba(17,17,17,0.06)",
+    emerald:"#1a7a4a",flame:"#e85a10",dark:false,deco:null,
+  },
+  noir:{
+    bg:"#0f0f0f",headerBg:"rgba(15,15,15,0.92)",card:"rgba(255,255,255,0.05)",
+    border:"rgba(255,255,255,0.09)",text:"#eeeeee",sub:"rgba(238,238,238,0.45)",
+    muted:"rgba(238,238,238,0.12)",accent:"#e0e0e0",accentLight:"rgba(255,255,255,0.07)",
+    emerald:"#34c877",flame:"#ff7030",dark:true,deco:null,
+  },
+  sakura:{
+    bg:"#fff5f7",headerBg:"rgba(255,245,247,0.92)",card:"rgba(255,255,255,0.85)",
+    border:"rgba(220,100,130,0.13)",text:"#2d1018",sub:"rgba(45,16,24,0.48)",
+    muted:"rgba(45,16,24,0.12)",accent:"#c84b6e",accentLight:"rgba(200,75,110,0.1)",
+    emerald:"#2e8b5a",flame:"#e85a10",dark:false,deco:"sakura",
+  },
+  dusk:{
+    bg:"#0e0c1a",headerBg:"rgba(14,12,26,0.92)",card:"rgba(255,255,255,0.06)",
+    border:"rgba(180,140,255,0.14)",text:"#e8e0ff",sub:"rgba(232,224,255,0.45)",
+    muted:"rgba(232,224,255,0.12)",accent:"#b89aff",accentLight:"rgba(184,154,255,0.1)",
+    emerald:"#4ecb8a",flame:"#ff8844",dark:true,deco:"dusk",
+  },
+  sepia:{
+    bg:"#f5f0e8",headerBg:"rgba(245,240,232,0.92)",card:"rgba(255,250,240,0.88)",
+    border:"rgba(120,80,30,0.14)",text:"#2c1a06",sub:"rgba(44,26,6,0.5)",
+    muted:"rgba(44,26,6,0.13)",accent:"#8b5e2a",accentLight:"rgba(139,94,42,0.1)",
+    emerald:"#3a7d44",flame:"#c84a10",dark:false,deco:"sepia",
+  },
 };
 
-const ALL_THEMES=[{key:"spring",label:"Printemps 🌸"},{key:"summer",label:"Été ☀️"},{key:"autumn",label:"Automne 🍂"},{key:"winter",label:"Hiver ❄️"},{key:"light",label:"Clair ☀️"},{key:"dark",label:"Sombre 🌙"}];
-const DEFAULT_THEME=getSeason(new Date().getMonth());
+/* ─── DECORATIONS (Version A) ─── */
+function SakuraDecor(){
+  const petals=useMemo(()=>{
+    const colors=["#f9a8c4","#f4c2d0","#fad4e0","#f8b8c8","#fbbfd2","#fce4ec"];
+    return Array.from({length:18},(_,i)=>({
+      id:i,
+      left:`${5+Math.random()*90}%`,
+      size:`${8+Math.random()*10}px`,
+      color:colors[Math.floor(Math.random()*colors.length)],
+      dur:`${7+Math.random()*8}s`,
+      delay:`${Math.random()*10}s`,
+      drift:`${-60+Math.random()*120}px`,
+      spin:`${180+Math.random()*360}deg`,
+    }));
+  },[]);
 
+  return(
+    <>
+      {petals.map(p=>(
+        <div key={p.id} className="petal" style={{
+          '--left':p.left,'--size':p.size,'--color':p.color,
+          '--dur':p.dur,'--delay':p.delay,'--drift':p.drift,'--spin':p.spin,
+        }}/>
+      ))}
+      {/* Cherry tree silhouette bottom-left */}
+      <svg style={{position:"fixed",bottom:70,left:-10,zIndex:0,opacity:0.12,pointerEvents:"none"}} width="180" height="180" viewBox="0 0 180 180">
+        <path d="M70 180 L70 100 Q60 80 40 70 Q20 60 15 40 Q25 50 45 55 Q35 35 50 20 Q55 40 65 50 Q65 30 80 15 Q82 38 75 55 Q90 45 100 25 Q100 50 88 62 Q110 55 125 38 Q118 60 100 70 Q115 75 125 65 Q115 88 95 88 L95 180 Z" fill="#c84b6e"/>
+      </svg>
+    </>
+  );
+}
+
+function DuskDecor(){
+  const stars=useMemo(()=>{
+    const colors=["#ffffff","#e8e0ff","#d0c8ff","#ffd8b0","#c8f0ff"];
+    return Array.from({length:40},(_,i)=>({
+      id:i,
+      x:`${Math.random()*100}%`,
+      y:`${Math.random()*60}%`,
+      sz:`${1+Math.random()*2.5}px`,
+      col:colors[Math.floor(Math.random()*colors.length)],
+      dur:`${2+Math.random()*4}s`,
+      delay:`${Math.random()*5}s`,
+      baseOp:0.3+Math.random()*0.6,
+    }));
+  },[]);
+
+  return(
+    <>
+      {stars.map(s=>(
+        <div key={s.id} className="star" style={{
+          '--x':s.x,'--y':s.y,'--sz':s.sz,'--col':s.col,
+          '--dur':s.dur,'--delay':s.delay,'--base-op':s.baseOp,
+        }}/>
+      ))}
+      {/* Moon top-right */}
+      <svg style={{position:"fixed",top:70,right:16,zIndex:0,opacity:0.18,pointerEvents:"none"}} width="80" height="80" viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r="36" fill="#b89aff"/>
+        <circle cx="52" cy="28" r="28" fill="#0e0c1a"/>
+      </svg>
+    </>
+  );
+}
+
+function SepiaDecor(){
+  const dusts=useMemo(()=>{
+    const colors=["#c8a870","#b8945a","#d4b880","#a07840"];
+    return Array.from({length:22},(_,i)=>({
+      id:i,
+      x:`${Math.random()*100}%`,
+      y:`${20+Math.random()*60}%`,
+      sz:`${2+Math.random()*5}px`,
+      col:colors[Math.floor(Math.random()*colors.length)]+"88",
+      dur:`${6+Math.random()*8}s`,
+      delay:`${Math.random()*8}s`,
+      dy:`${-30-Math.random()*60}px`,
+      dx:`${-20+Math.random()*40}px`,
+      sc:0.3+Math.random()*0.7,
+      op:0.3+Math.random()*0.4,
+    }));
+  },[]);
+
+  return(
+    <>
+      {dusts.map(d=>(
+        <div key={d.id} className="dust" style={{
+          '--x':d.x,'--y':d.y,'--sz':d.sz,'--col':d.col,
+          '--dur':d.dur,'--delay':d.delay,'--dy':d.dy,'--dx':d.dx,
+          '--sc':d.sc,'--op':d.op,
+        }}/>
+      ))}
+      {/* Feather bottom-right */}
+      <svg style={{position:"fixed",bottom:80,right:12,zIndex:0,opacity:0.13,pointerEvents:"none",transform:"rotate(-20deg)"}} width="60" height="120" viewBox="0 0 60 120">
+        <path d="M30 5 Q35 20 38 40 Q45 50 50 70 Q40 60 30 65 Q20 60 10 70 Q15 50 22 40 Q25 20 25 5 Q27.5 2 30 5Z" fill="#8b5e2a"/>
+        <line x1="30" y1="5" x2="30" y2="115" stroke="#8b5e2a" strokeWidth="1.5"/>
+        <path d="M30 20 Q40 25 50 22" stroke="#8b5e2a" strokeWidth="0.7" fill="none" opacity="0.5"/>
+        <path d="M30 30 Q42 35 50 32" stroke="#8b5e2a" strokeWidth="0.7" fill="none" opacity="0.5"/>
+        <path d="M30 40 Q43 46 50 44" stroke="#8b5e2a" strokeWidth="0.7" fill="none" opacity="0.5"/>
+        <path d="M30 50 Q42 56 48 55" stroke="#8b5e2a" strokeWidth="0.7" fill="none" opacity="0.5"/>
+        <path d="M30 20 Q20 25 10 22" stroke="#8b5e2a" strokeWidth="0.7" fill="none" opacity="0.5"/>
+        <path d="M30 30 Q18 35 10 32" stroke="#8b5e2a" strokeWidth="0.7" fill="none" opacity="0.5"/>
+        <path d="M30 40 Q17 46 10 44" stroke="#8b5e2a" strokeWidth="0.7" fill="none" opacity="0.5"/>
+        <path d="M30 50 Q18 56 12 55" stroke="#8b5e2a" strokeWidth="0.7" fill="none" opacity="0.5"/>
+      </svg>
+    </>
+  );
+}
+
+function ThemeDecor({themeKey}){
+  if(themeKey==="sakura") return <SakuraDecor/>;
+  if(themeKey==="dusk")   return <DuskDecor/>;
+  if(themeKey==="sepia")  return <SepiaDecor/>;
+  return null;
+}
+
+/* ─── CONSTANTS ─── */
 const MOODS=[{emoji:"😔",label:"Difficile",color:"#f87171"},{emoji:"😐",label:"Moyen",color:"#fb923c"},{emoji:"🙂",label:"Bien",color:"#facc15"},{emoji:"😊",label:"Super",color:"#4ade80"},{emoji:"🤩",label:"Incroyable",color:"#f472b6"}];
 const DAYS_FR=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
 const MONTHS_FULL=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
-// ✦ "verres" ajouté
 const UNITS=["L","ml","h","min","km","m","fois","pages","verres","kcal","€",""];
-// ✦ "verres" ajouté aux entiers
 const UNIT_INTEGER=["fois","pages","verres","h","min","ml","m","kcal"];
 
 const today=()=>new Date().toISOString().split("T")[0];
@@ -118,10 +303,51 @@ function snapPct(rawPct,hab){
   const step=10/qty;return Math.max(0,Math.min(100,Math.round(rawPct/step)*step));
 }
 
+/* ─── SUCCÈS ─── */
+const ACHIEVEMENTS=[
+  {
+    cat:"streak",icon:"🔥",title:"Streak",items:[
+      {id:"s1",label:"Day 1",desc:"Premier jour complété",check:(ms)=>ms>=1},
+      {id:"s2",label:"En bonne route",desc:"3 jours de suite",check:(ms)=>ms>=3},
+      {id:"s3",label:"Fidèle au poste",desc:"7 jours de suite",check:(ms)=>ms>=7},
+      {id:"s4",label:"En mission",desc:"21 jours de suite",check:(ms)=>ms>=21},
+      {id:"s5",label:"Qui es-tu ?",desc:"66 jours de suite",check:(ms)=>ms>=66},
+    ]
+  },
+  {
+    cat:"perfect",icon:"⭐",title:"Journées parfaites",items:[
+      {id:"p1",label:"Belle journée",desc:"1 journée parfaite",check:(_,pd)=>pd>=1},
+      {id:"p2",label:"Semaine en or",desc:"7 journées parfaites",check:(_,pd)=>pd>=7},
+      {id:"p3",label:"Mois exemplaire",desc:"30 journées parfaites",check:(_,pd)=>pd>=30},
+      {id:"p4",label:"Centurion",desc:"100 journées parfaites",check:(_,pd)=>pd>=100},
+      {id:"p5",label:"Intouchable",desc:"200 journées parfaites",check:(_,pd)=>pd>=200},
+      {id:"p6",label:"Renouveau",desc:"365 journées parfaites",check:(_,pd)=>pd>=365},
+    ]
+  },
+  {
+    cat:"habits",icon:"📦",title:"Habitudes créées",items:[
+      {id:"h1",label:"Le début",desc:"1 habitude créée",check:(_,__,hc)=>hc>=1},
+      {id:"h2",label:"Structuré",desc:"3 habitudes créées",check:(_,__,hc)=>hc>=3},
+      {id:"h3",label:"Déter",desc:"5 habitudes créées",check:(_,__,hc)=>hc>=5},
+      {id:"h4",label:"Obsédé",desc:"10 habitudes créées",check:(_,__,hc)=>hc>=10},
+      {id:"h5",label:"Dose...",desc:"20 habitudes créées",check:(_,__,hc)=>hc>=20},
+    ]
+  },
+  {
+    cat:"over",icon:"💪",title:"Dépassements",items:[
+      {id:"o1",label:"Tant qu'on y est",desc:"1 dépassement",check:(_,__,___,oc)=>oc>=1},
+      {id:"o2",label:"Chaud",desc:"10 dépassements",check:(_,__,___,oc)=>oc>=10},
+      {id:"o3",label:"Dans l'excès",desc:"50 dépassements",check:(_,__,___,oc)=>oc>=50},
+      {id:"o4",label:"Plus Ultra",desc:"100 dépassements",check:(_,__,___,oc)=>oc>=100},
+      {id:"o5",label:"Phénomène",desc:"500 dépassements",check:(_,__,___,oc)=>oc>=500},
+    ]
+  },
+];
+
 /* ─── FLAMME SVG ─── */
 function FlameSVG({size=24,color="#ff7030",innerColor="rgba(255,255,180,0.7)"}){
   return(
-    <svg width={size} height={size} viewBox="0 0 32 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg width={size} height={size} viewBox="0 0 32 36" fill="none">
       <path d="M16 33C10.5 33 6 28.8 6 23.5C6 19 8.5 15.5 10.5 13.5C10.2 16.5 12 18.5 14 19C12.8 16 14 12 16 9C16 12.5 18.5 15 17.5 17.5C19.5 15.5 20.5 13.5 20 11C22.8 13.5 26 17 26 23C26 28.5 21.5 33 16 33Z" fill={color}/>
       <path d="M16 30C13 30 11 27.8 11 25.5C11 23.5 12.2 22 13.5 21C13.2 23 14.5 24.2 15.5 24.8C15 23 15.8 21.2 17 20.2C17 22 18.5 23.5 18 25.2C19 23.8 19.3 22.3 18.8 21.2C20.5 23 20.8 25.3 20.8 26C20.8 28.5 18.8 30 16 30Z" fill={innerColor}/>
     </svg>
@@ -130,8 +356,7 @@ function FlameSVG({size=24,color="#ff7030",innerColor="rgba(255,255,180,0.7)"}){
 
 function FlameStreak({masterStreak,T}){
   const fc=T.flame||"#e87030";
-  const isHot=masterStreak>=7;
-  const isFire=masterStreak>=30;
+  const isHot=masterStreak>=7,isFire=masterStreak>=30;
   const innerC=isFire?"rgba(255,255,180,0.85)":isHot?"rgba(255,220,120,0.7)":"rgba(255,190,80,0.6)";
   return(
     <div style={{display:"flex",alignItems:"center",gap:3,padding:"2px 8px 2px 4px",borderRadius:20,background:masterStreak>0?`${fc}18`:"transparent",border:`1px solid ${masterStreak>0?fc+"30":T.muted}`,transition:"all .3s"}}>
@@ -172,7 +397,7 @@ function StreakCelebration({newStreak,onDone,T}){
   );
 }
 
-/* ─── RING ✦ gère pct > 100 (couleur flamme) ─── */
+/* ─── RING ─── */
 function Ring({pct=0,color,size=48,stroke=4,hideText=false,T}){
   const EMERALD=T?T.emerald:"#10b981";
   const FLAME=T?T.flame:"#e87030";
@@ -239,7 +464,7 @@ function ZenMode({habits,localProg,onPct,onCommit,T}){
   );
 }
 
-/* ─── SWIPE CARD ✦ double-tap = saisie libre + progression > 100% ─── */
+/* ─── SWIPE CARD ─── */
 function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs}){
   const EMERALD=T.emerald;
   const FLAME=T.flame||"#e87030";
@@ -267,7 +492,6 @@ function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs}){
     setDisplayPct(snapped);
   };
 
-  /* ✦ Confirme la valeur saisie, calcule le % (peut dépasser 100) */
   const confirmInput=()=>{
     const val=parseFloat(inputVal);
     if(isNaN(val)||val<0){setShowInput(false);return;}
@@ -291,7 +515,6 @@ function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs}){
     dragging.current=false;
     pendingPct.current=displayPct;
   };
-
   const onPM=e=>{
     const dx=Math.abs(e.clientX-startX.current),dy=Math.abs(e.clientY-startY.current);
     if(!dragging.current){
@@ -300,26 +523,18 @@ function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs}){
     }
     if(dragging.current)applyX(e.clientX);
   };
-
   const onPU=e=>{
     const isCtrl=e.target.closest("[data-ctrl]");
     if(dragging.current){
-      applyX(e.clientX);
-      dragging.current=false;
-      onPct(pendingPct.current);
-      onCommit(pendingPct.current);
-      return;
+      applyX(e.clientX);dragging.current=false;
+      onPct(pendingPct.current);onCommit(pendingPct.current);return;
     }
     dragging.current=false;
-    /* ✦ Détection double-tap (hors zones de contrôle) */
     if(!isCtrl){
       const now=Date.now();
       if(now-lastCardTap.current<350){
         lastCardTap.current=0;
-        // Pré-remplir avec la valeur actuelle si goalQty, sinon vide
-        const currentVal=hab.goalQty
-          ?Math.round((displayPct/100)*hab.goalQty*10)/10
-          :Math.round(displayPct);
+        const currentVal=hab.goalQty?Math.round((displayPct/100)*hab.goalQty*10)/10:Math.round(displayPct);
         setInputVal(currentVal>0?currentVal.toString():'');
         setShowInput(true);
         setTimeout(()=>inputRef.current?.focus(),60);
@@ -327,23 +542,18 @@ function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs}){
       }
       lastCardTap.current=now;
     }
-    onPct(pendingPct.current);
-    onCommit(pendingPct.current);
+    onPct(pendingPct.current);onCommit(pendingPct.current);
   };
-
   const onEmojiClick=e=>{
     e.stopPropagation();
     const next=pct>=100?0:100;
-    setDisplayPct(next);
-    onPct(next);
-    onCommit(next);
+    setDisplayPct(next);onPct(next);onCommit(next);
   };
 
   const prog=fmtProgress(hab,displayPct);
   const done=displayPct>=100;
   const exceeds=displayPct>100;
   const s=streak(hab,logs||{});
-
   const cardBg=exceeds?`${FLAME}08`:done?`${EMERALD}08`:T.card;
   const cardBorder=exceeds?`${FLAME}55`:done?`${EMERALD}44`:T.border;
   const barBg=exceeds?`${FLAME}0a`:`${EMERALD}09`;
@@ -352,18 +562,8 @@ function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs}){
 
   return(
     <div ref={ref} onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU}
-      style={{position:"relative",borderRadius:14,overflow:"hidden",
-        background:cardBg,
-        backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",
-        border:`1px solid ${cardBorder}`,
-        cursor:"ew-resize",userSelect:"none",touchAction:"pan-y",
-        transition:"box-shadow .3s,border .3s,background .3s",
-        boxShadow:done?"0 1px 12px rgba(0,0,0,0.04)":"0 1px 6px rgba(0,0,0,0.03)"}}>
-
-      {/* Barre de progression (cappée à 100% visuellement) */}
+      style={{position:"relative",borderRadius:14,overflow:"hidden",background:cardBg,backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",border:`1px solid ${cardBorder}`,cursor:"ew-resize",userSelect:"none",touchAction:"pan-y",transition:"box-shadow .3s,border .3s,background .3s",boxShadow:done?"0 1px 12px rgba(0,0,0,0.04)":"0 1px 6px rgba(0,0,0,0.03)"}}>
       <div style={{position:"absolute",inset:0,width:`${Math.min(displayPct,100)}%`,background:barBg,pointerEvents:"none",transition:"background .3s"}}/>
-
-      {/* Contenu principal */}
       <div style={{position:"relative",padding:"13px 14px",display:"flex",alignItems:"center",gap:12}}>
         <div data-ctrl="1" onPointerDown={e=>e.stopPropagation()} onClick={onEmojiClick}
           style={{position:"relative",width:40,height:40,flexShrink:0,cursor:"pointer"}}>
@@ -373,19 +573,16 @@ function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs}){
           </div>
         </div>
         <div style={{flex:1,minWidth:0,pointerEvents:"none"}}>
-          <div style={{fontWeight:600,fontSize:14,color:nameColor,transition:"color .3s",
-            whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{hab.name}</div>
+          <div style={{fontWeight:600,fontSize:14,color:nameColor,transition:"color .3s",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{hab.name}</div>
           <div style={{fontSize:11,color:T.sub,marginTop:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             {s>0&&<span style={{color:exceeds?FLAME:done?EMERALD:T.sub,fontWeight:500}}>🔥 {s}j</span>}
             {prog
-              ?<span style={{color:subColor}}>
-                  {prog}{exceeds?" ↑":""}
-                </span>
+              ?<span style={{color:subColor}}>{prog}{exceeds?" ↑":""}</span>
               :done
                 ?<span style={{color:EMERALD}}>Terminé</span>
                 :displayPct>0
                   ?<span style={{color:T.sub}}>{Math.round(displayPct)}%</span>
-                  :<span style={{color:T.muted}}>← glisse · ×2 pour saisir</span>
+                  :<span style={{color:T.muted}}>← glisse</span>
             }
           </div>
         </div>
@@ -393,70 +590,17 @@ function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs}){
           <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:14,padding:"4px 6px"}}>✎</button>
         </div>
       </div>
-
-      {/* ✦ Overlay de saisie (double-tap) */}
       {showInput&&(
-        <div
-          data-ctrl="1"
-          className="input-slide-in"
-          onPointerDown={e=>e.stopPropagation()}
-          style={{
-            position:"absolute",inset:0,
-            background:T.dark?"rgba(17,17,19,0.97)":"rgba(255,255,255,0.97)",
-            backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",
-            display:"flex",alignItems:"center",gap:8,padding:"0 12px",
-            zIndex:20,borderRadius:14,
-          }}>
-          {hab.goalQty&&(
-            <span style={{fontSize:11,color:T.sub,whiteSpace:"nowrap",flexShrink:0}}>
-              / {hab.goalQty}{hab.goalUnit}
-            </span>
-          )}
-          <input
-            ref={inputRef}
-            type="number"
-            min="0"
-            step={UNIT_INTEGER.includes(hab.goalUnit)?1:0.1}
-            value={inputVal}
-            onChange={e=>setInputVal(e.target.value)}
-            onKeyDown={e=>{
-              if(e.key==="Enter")confirmInput();
-              if(e.key==="Escape")setShowInput(false);
-            }}
+        <div data-ctrl="1" className="input-slide-in" onPointerDown={e=>e.stopPropagation()}
+          style={{position:"absolute",inset:0,background:T.dark?"rgba(17,17,19,0.97)":"rgba(255,255,255,0.97)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",display:"flex",alignItems:"center",gap:8,padding:"0 12px",zIndex:20,borderRadius:14}}>
+          {hab.goalQty&&<span style={{fontSize:11,color:T.sub,whiteSpace:"nowrap",flexShrink:0}}>/ {hab.goalQty}{hab.goalUnit}</span>}
+          <input ref={inputRef} type="number" min="0" step={UNIT_INTEGER.includes(hab.goalUnit)?1:0.1} value={inputVal} onChange={e=>setInputVal(e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter")confirmInput();if(e.key==="Escape")setShowInput(false);}}
             placeholder={hab.goalUnit||"valeur"}
-            style={{
-              flex:1,padding:"8px 10px",borderRadius:9,
-              border:`1.5px solid ${T.accent}`,
-              background:T.card,color:T.text,
-              fontSize:16,fontWeight:700,outline:"none",
-              fontFamily:"'DM Sans',sans-serif",
-              minWidth:0,
-            }}
-          />
-          {hab.goalUnit&&(
-            <span style={{fontSize:13,color:T.sub,fontWeight:600,flexShrink:0}}>
-              {hab.goalUnit}
-            </span>
-          )}
-          <button
-            onClick={confirmInput}
-            style={{
-              padding:"8px 14px",borderRadius:9,border:"none",
-              background:EMERALD,color:"#fff",fontWeight:700,
-              cursor:"pointer",fontSize:14,flexShrink:0,
-            }}>
-            ✓
-          </button>
-          <button
-            onClick={()=>setShowInput(false)}
-            style={{
-              padding:"8px 10px",borderRadius:9,
-              border:`1px solid ${T.border}`,
-              background:"transparent",color:T.sub,
-              cursor:"pointer",fontSize:13,flexShrink:0,
-            }}>
-            ✕
-          </button>
+            style={{flex:1,padding:"8px 10px",borderRadius:9,border:`1.5px solid ${T.accent}`,background:T.card,color:T.text,fontSize:16,fontWeight:700,outline:"none",fontFamily:"'DM Sans',sans-serif",minWidth:0}}/>
+          {hab.goalUnit&&<span style={{fontSize:13,color:T.sub,fontWeight:600,flexShrink:0}}>{hab.goalUnit}</span>}
+          <button onClick={confirmInput} style={{padding:"8px 14px",borderRadius:9,border:"none",background:EMERALD,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:14,flexShrink:0}}>✓</button>
+          <button onClick={()=>setShowInput(false)} style={{padding:"8px 10px",borderRadius:9,border:`1px solid ${T.border}`,background:"transparent",color:T.sub,cursor:"pointer",fontSize:13,flexShrink:0}}>✕</button>
         </div>
       )}
     </div>
@@ -602,8 +746,7 @@ function DayDetail({date,habits,logs,mood,onClose,T}){
       )}
       <div style={{display:"flex",flexDirection:"column",gap:7}}>
         {habits.filter(h=>scheduled(h,date)).map(h=>{
-          const v=logs[date]?.[h.id]||0,prog=fmtProgress(h,v);
-          const exc=v>100;
+          const v=logs[date]?.[h.id]||0,prog=fmtProgress(h,v),exc=v>100;
           return(
             <div key={h.id} style={{background:T.card,borderRadius:11,padding:"10px 13px",display:"flex",alignItems:"center",gap:10,border:`1px solid ${v>0?EMERALD+"33":T.border}`,position:"relative",overflow:"hidden"}}>
               <div style={{position:"absolute",inset:0,width:`${Math.min(v,100)}%`,background:`${EMERALD}07`,pointerEvents:"none"}}/>
@@ -696,51 +839,54 @@ function WeekView({habits,logs,moods,onEdit,onToggle,T}){
   );
 }
 
-/* ─── SORTED LIST ─── */
+/* ─── SORTED HABIT LIST (simplifié, sans FLIP) ─── */
 function SortedHabitList({habits,localProg,logs,onPct,onCommit,onEdit,T}){
-  const addOrder=useRef(habits.map(h=>h.id));
-  const[orderedIds,setOrderedIds]=useState(()=>{
-    const done=habits.filter(h=>(localProg[h.id]||0)>=100).map(h=>h.id);
-    const notDone=habits.filter(h=>(localProg[h.id]||0)<100).map(h=>h.id);
+  /* Ordre : newest first (ID desc) pour non-complétés, complétés à la fin */
+  const sorted=useMemo(()=>{
+    const notDone=[...habits.filter(h=>(localProg[h.id]||0)<100)].sort((a,b)=>Number(b.id)-Number(a.id));
+    const done=[...habits.filter(h=>(localProg[h.id]||0)>=100)].sort((a,b)=>Number(b.id)-Number(a.id));
     return[...notDone,...done];
-  });
-  const containerRef=useRef();
-  const cardRefs=useRef({});
+  },[habits,localProg]);
 
-  useEffect(()=>{
-    const currentIds=new Set(habits.map(h=>h.id));
-    const newHabs=habits.filter(h=>!addOrder.current.includes(h.id));
-    if(newHabs.length){newHabs.forEach(h=>addOrder.current.push(h.id));setOrderedIds(prev=>{const newIds=newHabs.map(h=>h.id);const existing=prev.filter(id=>currentIds.has(id));const done=existing.filter(id=>(localProg[id]||0)>=100);const notDone=existing.filter(id=>(localProg[id]||0)<100);return[...newIds,...notDone,...done];});}
-    setOrderedIds(prev=>prev.filter(id=>currentIds.has(id)));
-  },[habits]);
-
-  const habMap=Object.fromEntries(habits.map(h=>[h.id,h]));
-
-  const flipAndSort=useCallback((nextOrderFn)=>{
-    const before={};Object.entries(cardRefs.current).forEach(([id,el])=>{if(el)before[id]=el.getBoundingClientRect().top;});
-    setOrderedIds(prev=>{const next=nextOrderFn(prev);
-      requestAnimationFrame(()=>{requestAnimationFrame(()=>{Object.entries(cardRefs.current).forEach(([id,el])=>{if(!el||before[id]==null)return;const after=el.getBoundingClientRect().top;const delta=before[id]-after;if(Math.abs(delta)<1)return;el.style.transition="none";el.style.transform=`translateY(${delta}px)`;el.getBoundingClientRect();el.style.transition="transform 0.48s cubic-bezier(0.4,0,0.2,1)";el.style.transform="translateY(0)";const onEnd=()=>{el.style.transition="";el.style.transform="";el.removeEventListener("transitionend",onEnd);};el.addEventListener("transitionend",onEnd);});});});
-      return next;
-    });
-  },[]);
-
-  const handleCommit=useCallback((habId,pct)=>{
-    onCommit(habId,pct);
-    if(pct>=100){flipAndSort(prev=>{const notDone=prev.filter(id=>id!==habId&&(localProg[id]||0)<100);const done=prev.filter(id=>id===habId||(localProg[id]||0)>=100);return[...notDone,...done];});}
-    else{setOrderedIds(prev=>{const rest=prev.filter(id=>id!==habId);const done=rest.filter(id=>(localProg[id]||0)>=100);const notDone=rest.filter(id=>(localProg[id]||0)<100);return[habId,...notDone,...done];});}
-  },[onCommit,localProg,flipAndSort]);
-
-  const visible=orderedIds.filter(id=>habMap[id]);
   return(
-    <div ref={containerRef} style={{display:"flex",flexDirection:"column",gap:8}}>
-      {visible.map(id=>{
-        const h=habMap[id];const pct=localProg[h.id]||0;
-        return(
-          <div key={h.id} ref={el=>{if(el)cardRefs.current[h.id]=el;else delete cardRefs.current[h.id];}}>
-            <SwipeCard hab={h} pct={pct} logs={logs} onPct={p=>onPct(h.id,p)} onCommit={p=>handleCommit(h.id,p)} onEdit={()=>onEdit(h)} T={T}/>
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {sorted.map(h=>(
+        <div key={h.id} className={h._new?"habit-new":""}>
+          <SwipeCard hab={h} pct={localProg[h.id]||0} logs={logs}
+            onPct={p=>onPct(h.id,p)}
+            onCommit={p=>onCommit(h.id,p)}
+            onEdit={()=>onEdit(h)} T={T}/>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── ACHIEVEMENTS VIEW ─── */
+function AchievementsView({masterStreak,bestStreak,perfectDays,habitCount,overCount,T}){
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:20}}>
+      {ACHIEVEMENTS.map(cat=>(
+        <div key={cat.cat}>
+          <div style={{fontSize:10,fontWeight:600,color:T.sub,textTransform:"uppercase",letterSpacing:1,marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
+            <span>{cat.icon}</span>{cat.title}
           </div>
-        );
-      })}
+          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+            {cat.items.map(item=>{
+              const unlocked=item.check(masterStreak,perfectDays,habitCount,overCount);
+              return(
+                <div key={item.id} style={{background:T.card,border:`1px solid ${unlocked?T.emerald+"44":T.border}`,borderRadius:10,padding:"10px 13px",display:"flex",alignItems:"center",gap:10,opacity:unlocked?1:0.5,transition:"all .2s"}}>
+                  <span style={{fontSize:18}}>{unlocked?"✅":"🔒"}</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:600,fontSize:13,color:unlocked?T.text:T.sub}}>{item.label}</div>
+                    <div style={{fontSize:11,color:T.sub,marginTop:1}}>{item.desc}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -751,7 +897,9 @@ function App(){
   const[logs,setLogs]=useState({});
   const[moods,setMoods]=useState({});
   const[masterStreak,setMasterStreak]=useState(0);
+  const[bestStreak,setBestStreak]=useState(0);
   const[perfectDays,setPerfectDays]=useState(0);
+  const[overCount,setOverCount]=useState(0);
   const[loaded,setLoaded]=useState(false);
   const[tab,setTab]=useState("today");
   const[calYear,setCalYear]=useState(new Date().getFullYear());
@@ -766,29 +914,28 @@ function App(){
   const[localProg,setLocalProg]=useState({});
   const[zenMode,setZenMode]=useState(false);
   const[themeKey,setThemeKey]=useState(DEFAULT_THEME);
+  const[settingsTab,setSettingsTab]=useState("theme");
   const syncRef=useRef({});
   const prevAllDone=useRef(false);
-  const lastTap=useRef(0);
 
-  const T=SEASONAL_THEMES[themeKey]||SEASONAL_THEMES[DEFAULT_THEME];
+  const T=THEMES[themeKey]||THEMES[DEFAULT_THEME];
   const EMERALD=T.emerald;
 
   useEffect(()=>{
     const h=store.get(K.habits),l=store.get(K.logs),m=store.get(K.moods);
-    const ms=store.get(K.masterStreak)||0,pd=store.get(K.perfectDays)||0;
-    const zen=store.get(K.zenMode)||false;
-    const savedTheme=store.get(K.theme)||DEFAULT_THEME;
+    const ms=store.get(K.masterStreak)||0,bs=store.get(K.bestStreak)||0,pd=store.get(K.perfectDays)||0;
+    const oc=store.get(K.overCount)||0;
+    const zen=store.get(K.zenMode)||false,savedTheme=store.get(K.theme)||DEFAULT_THEME;
     if(h)setHabits(h);
     if(l){setLogs(l);setLocalProg(l[today()]||{});}
     if(m)setMoods(m);
-    setMasterStreak(ms);setPerfectDays(pd);setZenMode(zen);setThemeKey(savedTheme);
+    setMasterStreak(ms);setBestStreak(bs);setPerfectDays(pd);setOverCount(oc);
+    setZenMode(zen);setThemeKey(savedTheme);
     const lastCheck=store.get(K.lastCheck)||"";
     const td=today();
     if(lastCheck!==td){
       store.set(K.lastCheck,td);
-      const habs=h||[];
-      const logs2=l||{};
-      const yesterday=shift(td,-1);
+      const habs=h||[],logs2=l||{},yesterday=shift(td,-1);
       const yHabs=habs.filter(x=>scheduled(x,yesterday));
       if(yHabs.length>0){
         const allDoneYest=yHabs.every(x=>(logs2[yesterday]?.[x.id]||0)>=100);
@@ -810,7 +957,12 @@ function App(){
   const saveHabits=useCallback(h=>{setHabits(h);store.set(K.habits,h);},[]);
   const saveMoods=useCallback(m=>{setMoods(m);store.set(K.moods,m);},[]);
   const handleProg=useCallback((habId,pct)=>{setLocalProg(prev=>({...prev,[habId]:pct}));},[]);
+
   const handleCommit=useCallback((habId,pct)=>{
+    /* Compteur de dépassements */
+    if(pct>100){
+      setOverCount(prev=>{const n=prev+1;store.set(K.overCount,n);return n;});
+    }
     setLocalProg(prev=>{
       const next={...prev,[habId]:pct};
       clearTimeout(syncRef.current[habId]);
@@ -835,15 +987,14 @@ function App(){
         setMasterStreak(prev=>{
           const newMs=prev+1;
           store.set(K.masterStreak,newMs);
+          setBestStreak(bs=>{const nb=Math.max(bs,newMs);store.set(K.bestStreak,nb);return nb;});
           const newPd=perfectDays+1;
-          setPerfectDays(newPd);
-          store.set(K.perfectDays,newPd);
+          setPerfectDays(newPd);store.set(K.perfectDays,newPd);
           setStreakCeleb({newStreak:newMs});
           return newMs;
         });
       } else {
-        setMoodCeleb(true);
-        setShowMood(true);
+        setMoodCeleb(true);setShowMood(true);
       }
     }
     if(!allDone)prevAllDone.current=false;
@@ -865,34 +1016,26 @@ function App(){
     setLogs(prev=>{const nl={...prev,[date]:{...prev[date],[habId]:val}};store.set(K.logs,nl);return nl;});
   },[]);
 
-  const handleHeaderDoubleTap=()=>{
-    const now=Date.now();
-    if(now-lastTap.current<350){setZenMode(p=>{const n=!p;store.set(K.zenMode,n);return n;});}
-    lastTap.current=now;
-  };
-
   const td=today();
   const todayHabs=habits.filter(h=>scheduled(h,td));
   const allDone=todayHabs.length>0&&todayHabs.every(h=>(localProg[h.id]||0)>=100);
   const todayMood=moods[td];
   const pctToday=todayHabs.length?Math.round(todayHabs.reduce((a,h)=>a+Math.min(localProg[h.id]||0,100),0)/todayHabs.length):0;
+  const habitCount=habits.length;
 
   if(!loaded)return<div style={{background:T.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:T.muted,fontFamily:"monospace",fontSize:13}}>Chargement…</div></div>;
 
   return(
     <div style={{background:T.bg,minHeight:"100vh",color:T.text,paddingBottom:80,fontFamily:"'DM Sans',sans-serif"}}>
-      <div className="blob blob1" style={{background:T.blob1}}/>
-      <div className="blob blob2" style={{background:T.blob2}}/>
-      <div className="blob blob3" style={{background:T.blob3}}/>
+      <ThemeDecor themeKey={themeKey}/>
 
       {streakCeleb&&(
         <StreakCelebration newStreak={streakCeleb.newStreak} T={T} onDone={()=>{setStreakCeleb(null);setMoodCeleb(true);setShowMood(true);}}/>
       )}
-
       {toast&&<Toast msg={toast.msg} color={toast.color}/>}
 
       {/* HEADER */}
-      <div style={{backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",background:T.headerBg,borderBottom:`1px solid ${T.border}`,padding:"14px 20px 10px",position:"sticky",top:0,zIndex:10}} onClick={tab==="today"?handleHeaderDoubleTap:undefined}>
+      <div style={{backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",background:T.headerBg,borderBottom:`1px solid ${T.border}`,padding:"14px 20px 10px",position:"sticky",top:0,zIndex:10}}>
         <div style={{maxWidth:500,margin:"0 auto"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
             <div style={{flex:1,minWidth:0}}>
@@ -949,7 +1092,6 @@ function App(){
                 + Nouvelle habitude
               </button>
             )}
-            <div style={{textAlign:"center",marginTop:8,fontSize:10,color:T.muted}}>Double-tap header → mode Zen · Double-tap carte → saisie libre</div>
           </>
         )}
         {tab==="week"&&<WeekView habits={habits} logs={logs} moods={moods} onEdit={h=>{setEditHab(h);setShowForm(true);}} onToggle={handleBulkToggle} T={T}/>}
@@ -993,33 +1135,52 @@ function App(){
         {showDay&&<DayDetail date={showDay} habits={habits} logs={logs} mood={moods[showDay]} onClose={()=>setShowDay(null)} T={T}/>}
       </Modal>
       <Modal visible={showSettings} onClose={()=>setShowSettings(false)} T={T}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <h2 style={{margin:0,fontSize:17,fontWeight:700,color:T.text}}>Paramètres</h2>
           <button onClick={()=>setShowSettings(false)} style={{background:T.accentLight,border:"none",borderRadius:20,width:30,height:30,cursor:"pointer",color:T.sub,fontSize:14}}>✕</button>
         </div>
-        <div style={{marginBottom:20}}>
-          <div style={{fontSize:10,fontWeight:600,color:T.sub,textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Thème</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-            {ALL_THEMES.map(({key,label})=>{
-              const th=SEASONAL_THEMES[key];
-              const isActive=themeKey===key;
-              return(
-                <button key={key} onClick={()=>switchTheme(key)} style={{padding:"9px 12px",borderRadius:10,border:`1.5px solid ${isActive?T.accent:T.border}`,background:isActive?T.accentLight:"transparent",color:isActive?T.accent:T.sub,cursor:"pointer",fontSize:12,fontWeight:isActive?600:400,textAlign:"left",display:"flex",alignItems:"center",gap:8,transition:"all .2s"}}>
-                  <div style={{width:10,height:10,borderRadius:"50%",background:th.accent,flexShrink:0}}/>
-                  {label}
-                </button>
-              );
-            })}
-          </div>
+
+        {/* Onglets settings */}
+        <div style={{display:"flex",gap:6,marginBottom:18}}>
+          {[{k:"theme",l:"Thème"},{k:"progress",l:"Progression"},{k:"achievements",l:"Succès"}].map(({k,l})=>(
+            <button key={k} onClick={()=>setSettingsTab(k)} style={{flex:1,padding:"7px 4px",borderRadius:9,border:`1.5px solid ${settingsTab===k?T.accent:T.border}`,background:settingsTab===k?T.accentLight:"transparent",color:settingsTab===k?T.accent:T.sub,cursor:"pointer",fontSize:11,fontWeight:settingsTab===k?600:400}}>{l}</button>
+          ))}
         </div>
-        <div style={{marginBottom:18}}>
-          <div style={{fontSize:10,fontWeight:600,color:T.sub,textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Progression</div>
+
+        {settingsTab==="theme"&&(
+          <>
+            <div style={{fontSize:10,fontWeight:600,color:T.sub,textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Thème</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:20}}>
+              {ALL_THEMES.map(({key,label})=>{
+                const th=THEMES[key];
+                const isActive=themeKey===key;
+                return(
+                  <button key={key} onClick={()=>switchTheme(key)} style={{padding:"9px 12px",borderRadius:10,border:`1.5px solid ${isActive?T.accent:T.border}`,background:isActive?T.accentLight:"transparent",color:isActive?T.accent:T.sub,cursor:"pointer",fontSize:12,fontWeight:isActive?600:400,textAlign:"left",display:"flex",alignItems:"center",gap:8,transition:"all .2s"}}>
+                    <div style={{width:10,height:10,borderRadius:"50%",background:th.accent,flexShrink:0}}/>
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{background:T.accentLight,borderRadius:12,padding:13,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div>
+                <div style={{fontWeight:600,fontSize:13,color:T.text}}>Mode Zen</div>
+                <div style={{fontSize:11,color:T.sub,marginTop:1}}>Grille d'emojis épurée</div>
+              </div>
+              <button onClick={()=>setZenMode(p=>{const n=!p;store.set(K.zenMode,n);return n;})} style={{width:44,height:24,borderRadius:12,border:"none",cursor:"pointer",background:zenMode?EMERALD:T.border,position:"relative",transition:"background .25s",flexShrink:0}}>
+                <div style={{position:"absolute",top:3,width:18,height:18,borderRadius:"50%",background:"#fff",left:zenMode?22:3,transition:"left .25s"}}/>
+              </button>
+            </div>
+          </>
+        )}
+
+        {settingsTab==="progress"&&(
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}}>
             {[
               {icon:"🔥",label:"Série actuelle",value:`${masterStreak} jour${masterStreak>1?"s":""}`},
+              {icon:"🏆",label:"Meilleure série",value:`${bestStreak} jour${bestStreak>1?"s":""}`},
               {icon:"⭐",label:"Journées parfaites",value:`${perfectDays} total`},
-              {icon:"📈",label:"Prochain palier",value:`${perfectDays%7}/7 jours`},
-              {icon:"🎯",label:"Meilleur résultat",value:masterStreak>0?`${masterStreak}j en cours`:"C'est parti !"},
+              {icon:"💪",label:"Dépassements",value:`${overCount} fois`},
             ].map(({icon,label,value})=>(
               <div key={label} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:11,padding:"11px 10px",textAlign:"center",backdropFilter:"blur(8px)"}}>
                 <div style={{fontSize:20,marginBottom:4}}>{icon}</div>
@@ -1028,16 +1189,18 @@ function App(){
               </div>
             ))}
           </div>
-        </div>
-        <div style={{background:T.accentLight,borderRadius:12,padding:13,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div>
-            <div style={{fontWeight:600,fontSize:13,color:T.text}}>Mode Zen</div>
-            <div style={{fontSize:11,color:T.sub,marginTop:1}}>Grille d'emojis épurée</div>
-          </div>
-          <button onClick={()=>setZenMode(p=>{const n=!p;store.set(K.zenMode,n);return n;})} style={{width:44,height:24,borderRadius:12,border:"none",cursor:"pointer",background:zenMode?EMERALD:T.border,position:"relative",transition:"background .25s",flexShrink:0}}>
-            <div style={{position:"absolute",top:3,width:18,height:18,borderRadius:"50%",background:"#fff",left:zenMode?22:3,transition:"left .25s"}}/>
-          </button>
-        </div>
+        )}
+
+        {settingsTab==="achievements"&&(
+          <AchievementsView
+            masterStreak={masterStreak}
+            bestStreak={bestStreak}
+            perfectDays={perfectDays}
+            habitCount={habitCount}
+            overCount={overCount}
+            T={T}
+          />
+        )}
       </Modal>
     </div>
   );
