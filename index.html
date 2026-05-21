@@ -972,12 +972,7 @@ function App(){
               {tab==="today"&&<p style={{margin:"1px 0 0",fontSize:11,color:T.sub,textTransform:"capitalize"}}>{new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}</p>}
             </div>
             <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-              {tab==="today"&&todayHabs.length>0&&(
-                // FIX blur : isolation + transform hack
-                <div style={{isolation:"isolate",transform:"translateZ(0)"}}>
-                  <HeaderRing pct={pctToday} T={T}/>
-                </div>
-              )}
+
               <button onClick={()=>setShowSettings(true)} style={{background:T.accentLight,border:`1px solid ${T.border}`,borderRadius:10,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:15,color:T.sub,isolation:"isolate",transform:"translateZ(0)"}}>⚙️</button>
             </div>
           </div>
@@ -1063,7 +1058,7 @@ function App(){
           <button onClick={()=>setShowSettings(false)} style={{background:T.accentLight,border:"none",borderRadius:20,width:30,height:30,cursor:"pointer",color:T.sub,fontSize:14}}>✕</button>
         </div>
         <div style={{display:"flex",gap:6,marginBottom:20}}>
-          {[{k:"stats",l:"Stats"},{k:"succes",l:"Succès"},{k:"theme",l:"Thème"},{k:"zen",l:"Zen"}].map(({k,l})=>(
+          {[{k:"stats",l:"Stats"},{k:"sauvegarde",l:"Sauvegarde"},{k:"theme",l:"Thème"},{k:"zen",l:"Zen"}].map(({k,l})=>(
             <button key={k} onClick={()=>setSettingsTab(k)} style={{flex:1,padding:"7px 4px",borderRadius:9,border:`1.5px solid ${settingsTab===k?T.accent:T.border}`,background:settingsTab===k?T.accentLight:"transparent",color:settingsTab===k?T.accent:T.sub,cursor:"pointer",fontSize:11,fontWeight:settingsTab===k?600:400}}>{l}</button>
           ))}
         </div>
@@ -1085,8 +1080,51 @@ function App(){
             </div>
           </div>
         )}
-        {settingsTab==="succes"&&(
-          <AchievementsPanel masterStreak={masterStreak} bestStreak={bestStreak} perfectDays={perfectDays} habitCount={habits.length} overshots={overshots} T={T}/>
+        {settingsTab==="sauvegarde"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <div style={{background:T.accentLight,borderRadius:12,padding:14,border:`1px solid ${T.border}`}}>
+              <div style={{fontWeight:600,fontSize:13,color:T.text,marginBottom:3}}>📤 Exporter mes données</div>
+              <div style={{fontSize:11,color:T.sub,marginBottom:10}}>Télécharge un fichier JSON avec toutes tes habitudes, logs, humeurs et stats.</div>
+              <button onClick={()=>{
+                const data={habits,logs,moods,masterStreak,bestStreak,perfectDays,overshots,subtaskLogs,themeKey,zenMode};
+                const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+                const url=URL.createObjectURL(blob);
+                const a=document.createElement("a");a.href=url;a.download=`trackhabits-backup-${today()}.json`;a.click();URL.revokeObjectURL(url);
+              }} style={{width:"100%",padding:"11px",border:"none",borderRadius:10,background:T.accent,color:T.dark?"#111":"#fff",fontWeight:700,cursor:"pointer",fontSize:14}}>
+                Télécharger la sauvegarde
+              </button>
+            </div>
+            <div style={{background:T.accentLight,borderRadius:12,padding:14,border:`1px solid ${T.border}`}}>
+              <div style={{fontWeight:600,fontSize:13,color:T.text,marginBottom:3}}>📥 Importer mes données</div>
+              <div style={{fontSize:11,color:T.sub,marginBottom:10}}>Restaure depuis un fichier JSON exporté. Remplace toutes les données actuelles.</div>
+              <label style={{display:"block",width:"100%",padding:"11px",border:`1.5px dashed ${T.border}`,borderRadius:10,color:T.accent,fontWeight:700,fontSize:14,cursor:"pointer",textAlign:"center",boxSizing:"border-box"}}>
+                Choisir un fichier JSON
+                <input type="file" accept=".json" style={{display:"none"}} onChange={e=>{
+                  const file=e.target.files[0];if(!file)return;
+                  const reader=new FileReader();
+                  reader.onload=ev=>{
+                    try{
+                      const d=JSON.parse(ev.target.result);
+                      if(d.habits){store.set(K.habits,d.habits);setHabits(d.habits);}
+                      if(d.logs){store.set(K.logs,d.logs);setLogs(d.logs);setLocalProg(d.logs[today()]||{});}
+                      if(d.moods){store.set(K.moods,d.moods);setMoods(d.moods);}
+                      if(d.subtaskLogs){store.set("ht6-subtask-logs",d.subtaskLogs);setSubtaskLogs(d.subtaskLogs);}
+                      if(d.masterStreak!=null){store.set(K.masterStreak,d.masterStreak);setMasterStreak(d.masterStreak);}
+                      if(d.bestStreak!=null){store.set(K.bestStreak,d.bestStreak);setBestStreak(d.bestStreak);}
+                      if(d.perfectDays!=null){store.set(K.perfectDays,d.perfectDays);setPerfectDays(d.perfectDays);}
+                      if(d.overshots!=null){store.set(K.overshots,d.overshots);setOvershots(d.overshots);}
+                      if(d.themeKey){store.set(K.theme,d.themeKey);setThemeKey(d.themeKey);}
+                      if(d.zenMode!=null){store.set(K.zenMode,d.zenMode);setZenMode(d.zenMode);}
+                      pop("✅ Données restaurées !",T.emerald);
+                      setShowSettings(false);
+                    }catch{pop("❌ Fichier invalide","#f87171");}
+                  };
+                  reader.readAsText(file);
+                  e.target.value="";
+                }}/>
+              </label>
+            </div>
+          </div>
         )}
         {settingsTab==="theme"&&(
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
