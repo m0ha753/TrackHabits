@@ -33,6 +33,7 @@
     @keyframes streakNumPop { 0%{opacity:0;transform:scale(0.5)} 70%{transform:scale(1.2)} 100%{opacity:1;transform:scale(1)} }
     @keyframes streakOut { from{opacity:1;transform:scale(1)} to{opacity:0;transform:scale(0.7)} }
     @keyframes inputSlideIn { from{opacity:0;transform:scaleX(0.92)} to{opacity:1;transform:scaleX(1)} }
+    @keyframes subtaskExpand { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
     .habit-new { animation:popIn .55s cubic-bezier(.34,1.56,.64,1) both }
     .page { animation:fadeUp .28s ease both }
     input,select,textarea { -webkit-appearance:none; }
@@ -43,6 +44,7 @@
     .streak-flame-enter { animation:streakFlameIn 0.7s cubic-bezier(.34,1.56,.64,1) both; }
     .streak-num-pop { animation:streakNumPop 0.5s cubic-bezier(.34,1.56,.64,1) both; }
     .input-slide-in { animation:inputSlideIn 0.18s cubic-bezier(.34,1.2,.64,1) both; }
+    .subtask-panel { animation:subtaskExpand 0.22s cubic-bezier(.34,1.2,.64,1) both; }
   </style>
   <script src="react.production.min.js"></script>
   <script src="react-dom.production.min.js"></script>
@@ -51,7 +53,7 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const {useState,useEffect,useCallback,useRef}=React;
+const {useState,useEffect,useCallback,useRef,useMemo}=React;
 
 const K={habits:"ht6-habits",logs:"ht6-logs",moods:"ht6-moods",masterStreak:"ht6-ms",bestStreak:"ht6-bs",perfectDays:"ht6-pd",lastCheck:"ht6-lc",zenMode:"ht6-zen",theme:"ht6-theme",streakDate:"ht6-sd",overshots:"ht6-os"};
 const store={
@@ -76,7 +78,10 @@ const UNIT_INTEGER=["fois","pages","verres","h","min","ml","m","kcal"];
 const today=()=>new Date().toISOString().split("T")[0];
 const dow=d=>(new Date(d+"T12:00:00").getDay()+6)%7;
 const shift=(d,n)=>{const x=new Date(d+"T12:00:00");x.setDate(x.getDate()+n);return x.toISOString().split("T")[0];};
-const scheduled=(h,d)=>h.frequency==="daily"?true:h.frequency==="weekly"?(h.days||[]).includes(dow(d)):true;
+const scheduled=(h,d)=>{
+  if(h.paused)return false;
+  return h.frequency==="daily"?true:h.frequency==="weekly"?(h.days||[]).includes(dow(d)):true;
+};
 
 function streak(hab,logs){
   let s=0;
@@ -94,6 +99,16 @@ const fmtProgress=(hab,pct)=>{
   if(!hab.goalQty||hab.goalUnit===undefined)return null;
   const cur=Math.round((pct/100)*hab.goalQty*10)/10;
   return`${cur}${hab.goalUnit} / ${hab.goalQty}${hab.goalUnit}`;
+};
+
+// Format progress as quantity for week view
+const fmtProgressWeek=(hab,pct)=>{
+  if(pct===0)return null;
+  if(!hab.goalQty||!hab.goalUnit){
+    return pct>=100?"✓":null;
+  }
+  const cur=Math.round((pct/100)*hab.goalQty*10)/10;
+  return`${cur}${hab.goalUnit}`;
 };
 
 function snapPct(rawPct,hab){
@@ -169,6 +184,7 @@ function StreakCelebration({newStreak,onDone,T}){
   );
 }
 
+// ── FIX RING : isolé du backdrop-filter du header via will-change ──
 function Ring({pct=0,color,size=48,stroke=4,hideText=false,T}){
   const EMERALD=T?T.emerald:"#10b981";
   const FLAME=T?T.flame:"#e87030";
@@ -177,14 +193,27 @@ function Ring({pct=0,color,size=48,stroke=4,hideText=false,T}){
   const visualPct=Math.min(pct,100);
   const r=(size-stroke*2)/2,c=2*Math.PI*r;
   return(
-    <div style={{position:"relative",width:size,height:size,flexShrink:0}}>
-      <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
+    <div style={{position:"relative",width:size,height:size,flexShrink:0,isolation:"isolate"}}>
+      <svg width={size} height={size} style={{transform:"rotate(-90deg)",display:"block"}}>
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={T?.muted||"rgba(0,0,0,0.1)"} strokeWidth={stroke}/>
         {pct>0&&<circle cx={size/2} cy={size/2} r={r} fill="none" stroke={activeColor} strokeWidth={stroke} strokeDasharray={`${(visualPct/100)*c} ${c}`} strokeLinecap="round" style={{transition:"stroke-dasharray .4s ease"}}/>}
       </svg>
       {!hideText&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
         {pct>0&&pct<100&&<span style={{fontSize:size*0.22,fontWeight:700,color:T?.sub,fontFamily:"monospace"}}>{Math.round(pct)}</span>}
       </div>}
+    </div>
+  );
+}
+
+// ── HEADER RING — rendu hors du backdrop avec portal-like trick ──
+function HeaderRing({pct,T}){
+  const EMERALD=T.emerald;
+  return(
+    <div style={{position:"relative",width:40,height:40,isolation:"isolate",transform:"translateZ(0)"}}>
+      <Ring pct={pct} size={40} stroke={3.5} T={T}/>
+      <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
+        <span style={{fontSize:9,fontWeight:700,color:pct>=100?EMERALD:T.sub,fontFamily:"monospace"}}>{pct}%</span>
+      </div>
     </div>
   );
 }
@@ -230,8 +259,32 @@ function ZenMode({habits,localProg,onPct,onCommit,T}){
   );
 }
 
+// ── SUBTASK PANEL ──
+function SubtaskPanel({hab,subtaskLogs,onToggleSubtask,T}){
+  const subtasks=hab.subtasks||[];
+  if(!subtasks.length)return null;
+  const done=subtasks.filter(s=>subtaskLogs[s.id]).length;
+  return(
+    <div className="subtask-panel" style={{borderTop:`1px solid ${T.border}`,padding:"8px 14px 10px",display:"flex",flexDirection:"column",gap:5}}>
+      <div style={{fontSize:10,color:T.sub,fontWeight:600,textTransform:"uppercase",letterSpacing:0.8,marginBottom:2}}>{done}/{subtasks.length} sous-tâches</div>
+      {subtasks.map(s=>{
+        const checked=!!subtaskLogs[s.id];
+        return(
+          <button key={s.id} onClick={e=>{e.stopPropagation();onToggleSubtask(hab.id,s.id,!checked);}}
+            style={{display:"flex",alignItems:"center",gap:8,background:"none",border:"none",cursor:"pointer",padding:"4px 0",textAlign:"left"}}>
+            <div style={{width:18,height:18,borderRadius:5,border:`1.5px solid ${checked?T.emerald:T.border}`,background:checked?T.emerald:"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .18s"}}>
+              {checked&&<span style={{color:"#fff",fontSize:10,fontWeight:700,lineHeight:1}}>✓</span>}
+            </div>
+            <span style={{fontSize:13,color:checked?T.sub:T.text,textDecoration:checked?"line-through":"none",transition:"all .18s",flex:1}}>{s.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── SWIPE CARD ──
-function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs,onOvershot}){
+function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs,onOvershot,subtaskLogs,onToggleSubtask}){
   const EMERALD=T.emerald;
   const FLAME=T.flame;
   const ref=useRef();
@@ -244,6 +297,9 @@ function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs,onOvershot}){
   const[displayPct,setDisplayPct]=useState(pct);
   const[showInput,setShowInput]=useState(false);
   const[inputVal,setInputVal]=useState('');
+  const[showSubtasks,setShowSubtasks]=useState(false);
+
+  const hasSubtasks=(hab.subtasks||[]).length>0;
 
   useEffect(()=>{if(!dragging.current&&!showInput)setDisplayPct(pct);},[pct]);
 
@@ -289,6 +345,8 @@ function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs,onOvershot}){
       const now=Date.now();
       if(now-lastCardTap.current<350){
         lastCardTap.current=0;
+        // Si sous-tâches : toggle panel. Sinon : input manuel
+        if(hasSubtasks){setShowSubtasks(p=>!p);return;}
         const currentVal=hab.goalQty?Math.round((displayPct/100)*hab.goalQty*10)/10:Math.round(displayPct);
         setInputVal(currentVal>0?currentVal.toString():'');
         setShowInput(true);
@@ -302,6 +360,7 @@ function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs,onOvershot}){
 
   const onEmojiClick=e=>{
     e.stopPropagation();
+    if(hasSubtasks){setShowSubtasks(p=>!p);return;}
     const next=pct>=100?0:100;
     setDisplayPct(next);onPct(next);onCommit(next);
   };
@@ -311,46 +370,74 @@ function SwipeCard({hab,pct,onPct,onCommit,onEdit,T,logs,onOvershot}){
   const exceeds=displayPct>100;
   const s=streak(hab,logs||{});
   const FLAME_COLOR=FLAME;
-  const cardBg=exceeds?`${FLAME_COLOR}08`:done?`${EMERALD}08`:T.card;
-  const cardBorder=exceeds?`${FLAME_COLOR}55`:done?`${EMERALD}44`:T.border;
-  const nameColor=exceeds?FLAME_COLOR:done?EMERALD:T.text;
+  const cardBg=hab.paused?T.card:exceeds?`${FLAME_COLOR}08`:done?`${EMERALD}08`:T.card;
+  const cardBorder=hab.paused?T.border:exceeds?`${FLAME_COLOR}55`:done?`${EMERALD}44`:T.border;
+  const nameColor=hab.paused?T.sub:exceeds?FLAME_COLOR:done?EMERALD:T.text;
   const subColor=exceeds?FLAME_COLOR:displayPct>0?EMERALD:T.sub;
 
+  // Sous-tâches : compte
+  const subDone=hasSubtasks?(hab.subtasks||[]).filter(s=>subtaskLogs&&subtaskLogs[s.id]).length:0;
+  const subTotal=(hab.subtasks||[]).length;
+
   return(
-    <div ref={ref} onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU}
-      style={{position:"relative",borderRadius:14,overflow:"hidden",background:cardBg,backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",border:`1px solid ${cardBorder}`,cursor:"ew-resize",userSelect:"none",touchAction:"pan-y",transition:"box-shadow .3s,border .3s,background .3s",boxShadow:"0 1px 6px rgba(0,0,0,0.03)"}}>
-      <div style={{position:"absolute",inset:0,width:`${Math.min(displayPct,100)}%`,background:`${exceeds?FLAME_COLOR:EMERALD}09`,pointerEvents:"none",transition:"background .3s"}}/>
-      <div style={{position:"relative",padding:"13px 14px",display:"flex",alignItems:"center",gap:12}}>
-        <div data-ctrl="1" onPointerDown={e=>e.stopPropagation()} onClick={onEmojiClick} style={{position:"relative",width:40,height:40,flexShrink:0,cursor:"pointer"}}>
-          <Ring pct={displayPct} size={40} stroke={3} hideText T={T}/>
-          <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <span style={{fontSize:15}}>{done?"✓":hab.emoji}</span>
+    <div style={{borderRadius:14,overflow:"hidden",background:cardBg,backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",border:`1px solid ${cardBorder}`,transition:"box-shadow .3s,border .3s,background .3s",boxShadow:"0 1px 6px rgba(0,0,0,0.03)"}}>
+      <div ref={ref} onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU}
+        style={{position:"relative",overflow:"hidden",cursor:hab.paused?"default":"ew-resize",userSelect:"none",touchAction:"pan-y"}}>
+        <div style={{position:"absolute",inset:0,width:`${Math.min(displayPct,100)}%`,background:hab.paused?"transparent":`${exceeds?FLAME_COLOR:EMERALD}09`,pointerEvents:"none",transition:"background .3s"}}/>
+        <div style={{position:"relative",padding:"13px 14px",display:"flex",alignItems:"center",gap:12}}>
+          <div data-ctrl="1" onPointerDown={e=>e.stopPropagation()} onClick={onEmojiClick} style={{position:"relative",width:40,height:40,flexShrink:0,cursor:"pointer"}}>
+            {hab.paused?(
+              <div style={{width:40,height:40,borderRadius:"50%",border:`2px dashed ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:15}}>{hab.emoji}</span>
+              </div>
+            ):(
+              <>
+                <Ring pct={displayPct} size={40} stroke={3} hideText T={T}/>
+                <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <span style={{fontSize:15}}>{done?"✓":hab.emoji}</span>
+                </div>
+              </>
+            )}
+          </div>
+          <div style={{flex:1,minWidth:0,pointerEvents:"none"}}>
+            <div style={{fontWeight:600,fontSize:14,color:nameColor,transition:"color .3s",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"flex",alignItems:"center",gap:5}}>
+              {hab.name}
+              {hab.paused&&<span style={{fontSize:9,background:T.muted,color:T.sub,borderRadius:20,padding:"1px 5px",fontWeight:500,flexShrink:0}}>EN PAUSE</span>}
+            </div>
+            <div style={{fontSize:11,color:T.sub,marginTop:2,display:"flex",alignItems:"center",gap:6}}>
+              {s>0&&!hab.paused&&<span style={{color:exceeds?FLAME_COLOR:done?EMERALD:T.sub,fontWeight:500}}>🔥 {s}j</span>}
+              {prog&&!hab.paused&&<span style={{color:subColor}}>{prog}{exceeds?" ↑":""}</span>}
+              {hasSubtasks&&!hab.paused&&<span style={{color:subDone===subTotal&&subTotal>0?EMERALD:T.sub,fontWeight:500}}>📋 {subDone}/{subTotal}</span>}
+              {hab.paused&&<span style={{color:T.sub,fontSize:10}}>Streak préservé</span>}
+            </div>
+          </div>
+          <div data-ctrl="1" style={{display:"flex",alignItems:"center",gap:4,pointerEvents:"all"}} onPointerDown={e=>e.stopPropagation()}>
+            {hasSubtasks&&!hab.paused&&(
+              <button onClick={()=>setShowSubtasks(p=>!p)} style={{background:"none",border:"none",cursor:"pointer",color:showSubtasks?T.accent:T.muted,fontSize:14,padding:"4px 4px",transition:"color .2s"}}>
+                {showSubtasks?"▲":"▼"}
+              </button>
+            )}
+            <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:14,padding:"4px 6px"}}>✎</button>
           </div>
         </div>
-        <div style={{flex:1,minWidth:0,pointerEvents:"none"}}>
-          <div style={{fontWeight:600,fontSize:14,color:nameColor,transition:"color .3s",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{hab.name}</div>
-          <div style={{fontSize:11,color:T.sub,marginTop:2,display:"flex",alignItems:"center",gap:6}}>
-            {s>0&&<span style={{color:exceeds?FLAME_COLOR:done?EMERALD:T.sub,fontWeight:500}}>🔥 {s}j</span>}
-            {prog&&<span style={{color:subColor}}>{prog}{exceeds?" ↑":""}</span>}
+        {showInput&&(
+          <div data-ctrl="1" className="input-slide-in" onPointerDown={e=>e.stopPropagation()} style={{position:"absolute",inset:0,background:T.dark?"rgba(17,17,19,0.97)":"rgba(255,255,255,0.97)",backdropFilter:"blur(10px)",display:"flex",alignItems:"center",gap:8,padding:"0 12px",zIndex:20,borderRadius:"14px 14px 0 0"}}>
+            {hab.goalQty&&<span style={{fontSize:11,color:T.sub,whiteSpace:"nowrap",flexShrink:0}}>/ {hab.goalQty}{hab.goalUnit}</span>}
+            <input ref={inputRef} type="number" min="0" step={UNIT_INTEGER.includes(hab.goalUnit)?1:0.1} value={inputVal} onChange={e=>setInputVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")confirmInput();if(e.key==="Escape")setShowInput(false);}} placeholder={hab.goalUnit||"valeur"} style={{flex:1,padding:"8px 10px",borderRadius:9,border:`1.5px solid ${T.accent}`,background:T.card,color:T.text,fontSize:16,fontWeight:700,outline:"none",fontFamily:"'DM Sans',sans-serif",minWidth:0}}/>
+            {hab.goalUnit&&<span style={{fontSize:13,color:T.sub,fontWeight:600,flexShrink:0}}>{hab.goalUnit}</span>}
+            <button onClick={confirmInput} style={{padding:"8px 14px",borderRadius:9,border:"none",background:EMERALD,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:14,flexShrink:0}}>✓</button>
+            <button onClick={()=>setShowInput(false)} style={{padding:"8px 10px",borderRadius:9,border:`1px solid ${T.border}`,background:"transparent",color:T.sub,cursor:"pointer",fontSize:13,flexShrink:0}}>✕</button>
           </div>
-        </div>
-        <div data-ctrl="1" style={{pointerEvents:"all"}} onPointerDown={e=>e.stopPropagation()}>
-          <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:14,padding:"4px 6px"}}>✎</button>
-        </div>
+        )}
       </div>
-      {showInput&&(
-        <div data-ctrl="1" className="input-slide-in" onPointerDown={e=>e.stopPropagation()} style={{position:"absolute",inset:0,background:T.dark?"rgba(17,17,19,0.97)":"rgba(255,255,255,0.97)",backdropFilter:"blur(10px)",display:"flex",alignItems:"center",gap:8,padding:"0 12px",zIndex:20,borderRadius:14}}>
-          {hab.goalQty&&<span style={{fontSize:11,color:T.sub,whiteSpace:"nowrap",flexShrink:0}}>/ {hab.goalQty}{hab.goalUnit}</span>}
-          <input ref={inputRef} type="number" min="0" step={UNIT_INTEGER.includes(hab.goalUnit)?1:0.1} value={inputVal} onChange={e=>setInputVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")confirmInput();if(e.key==="Escape")setShowInput(false);}} placeholder={hab.goalUnit||"valeur"} style={{flex:1,padding:"8px 10px",borderRadius:9,border:`1.5px solid ${T.accent}`,background:T.card,color:T.text,fontSize:16,fontWeight:700,outline:"none",fontFamily:"'DM Sans',sans-serif",minWidth:0}}/>
-          {hab.goalUnit&&<span style={{fontSize:13,color:T.sub,fontWeight:600,flexShrink:0}}>{hab.goalUnit}</span>}
-          <button onClick={confirmInput} style={{padding:"8px 14px",borderRadius:9,border:"none",background:EMERALD,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:14,flexShrink:0}}>✓</button>
-          <button onClick={()=>setShowInput(false)} style={{padding:"8px 10px",borderRadius:9,border:`1px solid ${T.border}`,background:"transparent",color:T.sub,cursor:"pointer",fontSize:13,flexShrink:0}}>✕</button>
-        </div>
+      {showSubtasks&&hasSubtasks&&!hab.paused&&(
+        <SubtaskPanel hab={hab} subtaskLogs={subtaskLogs||{}} onToggleSubtask={onToggleSubtask} T={T}/>
       )}
     </div>
   );
 }
 
+// ── HABIT FORM ──
 function HabitForm({hab,onSave,onDelete,onClose,T}){
   const[name,setName]=useState(hab?.name||"");
   const[emoji,setEmoji]=useState(hab?.emoji||"🏃");
@@ -360,10 +447,27 @@ function HabitForm({hab,onSave,onDelete,onClose,T}){
   const[meas,setMeas]=useState(!!(hab?.goalQty));
   const[qty,setQty]=useState(hab?.goalQty||1);
   const[unit,setUnit]=useState(hab?.goalUnit||"fois");
+  const[paused,setPaused]=useState(hab?.paused||false);
+  const[subtasks,setSubtasks]=useState(hab?.subtasks||[]);
+  const[newSub,setNewSub]=useState("");
   const[saved,setSaved]=useState(false);
   const EMERALD=T.emerald;
   const inp={width:"100%",padding:"10px 12px",borderRadius:10,border:`1px solid ${T.border}`,background:T.card,color:T.text,fontSize:14,fontFamily:"'DM Sans',sans-serif",outline:"none",boxSizing:"border-box"};
-  const save=()=>{if(!name.trim())return;setSaved(true);setTimeout(()=>onSave({name:name.trim(),emoji,frequency:freq,days,timesPerWeek:xpw,goalQty:meas?Number(qty):null,goalUnit:meas?unit:""}),380);};
+
+  const addSubtask=()=>{
+    const label=newSub.trim();
+    if(!label)return;
+    setSubtasks(p=>[...p,{id:Date.now().toString(),label}]);
+    setNewSub("");
+  };
+  const removeSubtask=id=>setSubtasks(p=>p.filter(s=>s.id!==id));
+
+  const save=()=>{
+    if(!name.trim())return;
+    setSaved(true);
+    setTimeout(()=>onSave({name:name.trim(),emoji,frequency:freq,days,timesPerWeek:xpw,goalQty:meas?Number(qty):null,goalUnit:meas?unit:"",paused,subtasks}),380);
+  };
+
   return(
     <>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
@@ -406,6 +510,23 @@ function HabitForm({hab,onSave,onDelete,onClose,T}){
           </div>
         )}
       </div>
+
+      {/* Sous-tâches */}
+      <div style={{marginBottom:14,background:T.accentLight,borderRadius:12,padding:12,border:`1px solid ${T.border}`}}>
+        <div style={{fontWeight:600,fontSize:13,color:T.text,marginBottom:4}}>Sous-tâches</div>
+        <div style={{fontSize:11,color:T.sub,marginBottom:10}}>Optionnel — petites étapes à cocher</div>
+        {subtasks.map(s=>(
+          <div key={s.id} style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}>
+            <span style={{fontSize:12,color:T.sub,flex:1,padding:"6px 8px",background:T.card,borderRadius:7,border:`1px solid ${T.border}`}}>{s.label}</span>
+            <button onClick={()=>removeSubtask(s.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#f87171",fontSize:14,padding:"2px 4px",flexShrink:0}}>✕</button>
+          </div>
+        ))}
+        <div style={{display:"flex",gap:6,marginTop:4}}>
+          <input value={newSub} onChange={e=>setNewSub(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addSubtask();}}} placeholder="Ajouter une sous-tâche…" style={{...inp,flex:1,padding:"8px 10px",fontSize:13}}/>
+          <button onClick={addSubtask} style={{padding:"8px 12px",borderRadius:9,border:"none",background:T.accent,color:T.dark?"#111":"#fff",fontWeight:700,cursor:"pointer",fontSize:14,flexShrink:0}}>+</button>
+        </div>
+      </div>
+
       <div style={{marginBottom:14}}>
         <label style={{fontSize:10,color:T.sub,textTransform:"uppercase",letterSpacing:1}}>Fréquence</label>
         <div style={{display:"flex",gap:6,marginTop:7}}>
@@ -428,6 +549,20 @@ function HabitForm({hab,onSave,onDelete,onClose,T}){
           <input type="range" min={1} max={7} value={xpw} onChange={e=>setXpw(+e.target.value)} style={{width:"100%",marginTop:7,accentColor:T.accent}}/>
         </div>
       )}
+
+      {/* Pause */}
+      {hab&&(
+        <div style={{marginBottom:14,background:T.accentLight,borderRadius:12,padding:12,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontWeight:600,fontSize:13,color:T.text}}>⏸ Mettre en pause</div>
+            <div style={{fontSize:11,color:T.sub,marginTop:1}}>Ignorée aujourd'hui, streak préservé</div>
+          </div>
+          <button onClick={()=>setPaused(p=>!p)} style={{width:44,height:24,borderRadius:12,border:"none",cursor:"pointer",background:paused?"#fb923c":T.border,position:"relative",transition:"background .25s",flexShrink:0}}>
+            <div style={{position:"absolute",top:3,width:18,height:18,borderRadius:"50%",background:"#fff",left:paused?22:3,transition:"left .25s"}}/>
+          </button>
+        </div>
+      )}
+
       <button onClick={save} style={{width:"100%",padding:"13px",border:"none",borderRadius:12,background:saved?EMERALD:T.accent,color:T.dark?"#111":"#fff",fontWeight:700,cursor:"pointer",fontSize:15,transition:"background .3s"}}>
         {saved?"✓ Enregistré !":hab?"Enregistrer":"Créer l'habitude"}
       </button>
@@ -537,6 +672,7 @@ function YearCalendar({year,habits,logs,moods,onDay,T}){
   );
 }
 
+// ── WEEK VIEW — progression en quantité ──
 function WeekView({habits,logs,moods,onEdit,onToggle,T}){
   const EMERALD=T.emerald;
   const td=today();
@@ -557,7 +693,7 @@ function WeekView({habits,logs,moods,onEdit,onToggle,T}){
         })}
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {habits.map(h=>(
+        {habits.filter(h=>!h.paused).map(h=>(
           <div key={h.id} style={{background:T.card,backdropFilter:"blur(12px)",border:`1px solid ${T.border}`,borderRadius:13,padding:12}}>
             <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7}}>
               <span style={{fontSize:16}}>{h.emoji}</span>
@@ -568,7 +704,11 @@ function WeekView({habits,logs,moods,onEdit,onToggle,T}){
             <div style={{display:"flex",gap:2}}>
               {weekDays.map((d,i)=>{
                 const sch=scheduled(h,d),val=logs[d]?.[h.id]||0,isFut=d>td;
-                return<button key={d} onClick={()=>sch&&!isFut&&onToggle(h.id,d,val>=100?0:100)} style={{flex:1,height:28,borderRadius:6,cursor:sch&&!isFut?"pointer":"default",background:val>=100?`${EMERALD}44`:val>0?`${EMERALD}18`:"transparent",border:`1px solid ${d===td&&sch?T.accent:val>0?EMERALD+"33":T.border}`,color:val>=100?EMERALD:val>0?EMERALD:T.sub,fontSize:9,fontWeight:val>=100?700:400,transition:"all .2s"}}>{val>=100?"✓":val>0?`${val}%`:sch?DAYS_FR[i][0]:"·"}</button>;
+                // Affichage en quantité
+                const qtyLabel=fmtProgressWeek(h,val);
+                const cellLabel=val>=100?"✓":qtyLabel||( sch?DAYS_FR[i][0]:"·");
+                const fontSize=qtyLabel&&qtyLabel.length>4?7:val>=100?9:9;
+                return<button key={d} onClick={()=>sch&&!isFut&&onToggle(h.id,d,val>=100?0:100)} style={{flex:1,height:34,borderRadius:6,cursor:sch&&!isFut?"pointer":"default",background:val>=100?`${EMERALD}44`:val>0?`${EMERALD}18`:"transparent",border:`1px solid ${d===td&&sch?T.accent:val>0?EMERALD+"33":T.border}`,color:val>=100?EMERALD:val>0?EMERALD:T.sub,fontSize,fontWeight:val>=100?700:val>0?600:400,transition:"all .2s",padding:"2px 1px",lineHeight:1.2,display:"flex",alignItems:"center",justifyContent:"center"}}>{cellLabel}</button>;
               })}
             </div>
           </div>
@@ -578,19 +718,18 @@ function WeekView({habits,logs,moods,onEdit,onToggle,T}){
   );
 }
 
-// ── SORTED HABIT LIST — tri par date d'ajout desc, complétées en bas ──
-function SortedHabitList({habits,localProg,logs,onPct,onCommit,onEdit,T,onOvershot}){
+// ── SORTED HABIT LIST ──
+function SortedHabitList({habits,localProg,logs,onPct,onCommit,onEdit,T,onOvershot,subtaskLogsByHabit,onToggleSubtask}){
   const cardRefs=useRef({});
 
-  // Tri : non-complétées d'abord (newest first), puis complétées (newest first)
-  const sorted=React.useMemo(()=>{
-    const notDone=[...habits.filter(h=>(localProg[h.id]||0)<100)].sort((a,b)=>Number(b.id)-Number(a.id));
-    const done=[...habits.filter(h=>(localProg[h.id]||0)>=100)].sort((a,b)=>Number(b.id)-Number(a.id));
-    return[...notDone,...done];
+  const sorted=useMemo(()=>{
+    const notDone=[...habits.filter(h=>!h.paused&&(localProg[h.id]||0)<100)].sort((a,b)=>Number(b.id)-Number(a.id));
+    const done=[...habits.filter(h=>!h.paused&&(localProg[h.id]||0)>=100)].sort((a,b)=>Number(b.id)-Number(a.id));
+    const paused=[...habits.filter(h=>h.paused)].sort((a,b)=>Number(b.id)-Number(a.id));
+    return[...notDone,...done,...paused];
   },[habits,localProg]);
 
   const handleCommit=useCallback((habId,pct)=>{
-    // FLIP animation
     const before={};
     Object.entries(cardRefs.current).forEach(([id,el])=>{if(el)before[id]=el.getBoundingClientRect().top;});
     onCommit(habId,pct);
@@ -614,7 +753,7 @@ function SortedHabitList({habits,localProg,logs,onPct,onCommit,onEdit,T,onOversh
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
       {sorted.map(h=>(
         <div key={h.id} ref={el=>{if(el)cardRefs.current[h.id]=el;else delete cardRefs.current[h.id];}}>
-          <SwipeCard hab={h} pct={localProg[h.id]||0} logs={logs} onPct={p=>onPct(h.id,p)} onCommit={p=>handleCommit(h.id,p)} onEdit={()=>onEdit(h)} T={T} onOvershot={onOvershot}/>
+          <SwipeCard hab={h} pct={localProg[h.id]||0} logs={logs} onPct={p=>onPct(h.id,p)} onCommit={p=>handleCommit(h.id,p)} onEdit={()=>onEdit(h)} T={T} onOvershot={onOvershot} subtaskLogs={subtaskLogsByHabit[h.id]||{}} onToggleSubtask={onToggleSubtask}/>
         </div>
       ))}
     </div>
@@ -660,6 +799,8 @@ function App(){
   const[habits,setHabits]=useState([]);
   const[logs,setLogs]=useState({});
   const[moods,setMoods]=useState({});
+  // subtaskLogs structure: { [date]: { [habId]: { [subtaskId]: bool } } }
+  const[subtaskLogs,setSubtaskLogs]=useState({});
   const[masterStreak,setMasterStreak]=useState(0);
   const[bestStreak,setBestStreak]=useState(0);
   const[perfectDays,setPerfectDays]=useState(0);
@@ -691,9 +832,11 @@ function App(){
     const ms=store.get(K.masterStreak)||0,bs=store.get(K.bestStreak)||0,pd=store.get(K.perfectDays)||0,os=store.get(K.overshots)||0;
     const zen=store.get(K.zenMode)||false;
     const savedTheme=store.get(K.theme)||"blanc";
+    const sl=store.get("ht6-subtask-logs")||{};
     if(h)setHabits(h);
     if(l){setLogs(l);setLocalProg(l[today()]||{});}
     if(m)setMoods(m);
+    setSubtaskLogs(sl);
     setMasterStreak(ms);setBestStreak(bs);setPerfectDays(pd);setOvershots(os);setZenMode(zen);setThemeKey(savedTheme);
     const lastCheck=store.get(K.lastCheck)||"";
     const td=today();
@@ -733,6 +876,25 @@ function App(){
       return next;
     });
   },[]);
+
+  // ── Toggle sous-tâche ──
+  const handleToggleSubtask=useCallback((habId,subtaskId,checked)=>{
+    const td=today();
+    setSubtaskLogs(prev=>{
+      const next={...prev,[td]:{...prev[td],[habId]:{...(prev[td]?.[habId]||{}),[subtaskId]:checked}}};
+      store.set("ht6-subtask-logs",next);
+      // Recalcule la progression de l'habitude selon les sous-tâches
+      const hab=habits.find(h=>h.id===habId);
+      if(hab&&(hab.subtasks||[]).length>0){
+        const subs=hab.subtasks;
+        const doneCount=subs.filter(s=>s.id===subtaskId?checked:(next[td]?.[habId]?.[s.id]||false)).length;
+        const newPct=Math.round((doneCount/subs.length)*100);
+        handleProg(habId,newPct);
+        handleCommit(habId,newPct);
+      }
+      return next;
+    });
+  },[habits,handleProg,handleCommit]);
 
   const switchTheme=useCallback((key)=>{setThemeKey(key);store.set(K.theme,key);},[]);
 
@@ -785,6 +947,9 @@ function App(){
   const todayMood=moods[td];
   const pctToday=todayHabs.length?Math.round(todayHabs.reduce((a,h)=>a+Math.min(localProg[h.id]||0,100),0)/todayHabs.length):0;
 
+  // subtaskLogs pour aujourd'hui par habitude
+  const todaySubtaskLogs=useMemo(()=>subtaskLogs[td]||{},[subtaskLogs,td]);
+
   if(!loaded)return<div style={{background:T.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:T.muted,fontSize:13}}>Chargement…</div></div>;
 
   return(
@@ -792,7 +957,7 @@ function App(){
       {streakCeleb&&<StreakCelebration newStreak={streakCeleb.newStreak} T={T} onDone={()=>{setStreakCeleb(null);setMoodCeleb(true);setShowMood(true);}}/>}
       {toast&&<Toast msg={toast.msg} color={toast.color}/>}
 
-      {/* HEADER */}
+      {/* HEADER — ring isolé du backdrop avec transform:translateZ(0) */}
       <div style={{backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",background:T.headerBg,borderBottom:`1px solid ${T.border}`,padding:"14px 20px 10px",position:"sticky",top:0,zIndex:10}} onClick={tab==="today"?handleHeaderDoubleTap:undefined}>
         <div style={{maxWidth:500,margin:"0 auto"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
@@ -808,14 +973,12 @@ function App(){
             </div>
             <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
               {tab==="today"&&todayHabs.length>0&&(
-                <div style={{position:"relative",width:40,height:40}}>
-                  <Ring pct={pctToday} size={40} stroke={3.5} T={T}/>
-                  <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    <span style={{fontSize:9,fontWeight:700,color:pctToday>=100?EMERALD:T.sub,fontFamily:"monospace"}}>{pctToday}%</span>
-                  </div>
+                // FIX blur : isolation + transform hack
+                <div style={{isolation:"isolate",transform:"translateZ(0)"}}>
+                  <HeaderRing pct={pctToday} T={T}/>
                 </div>
               )}
-              <button onClick={()=>setShowSettings(true)} style={{background:T.accentLight,border:`1px solid ${T.border}`,borderRadius:10,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:15,color:T.sub}}>⚙️</button>
+              <button onClick={()=>setShowSettings(true)} style={{background:T.accentLight,border:`1px solid ${T.border}`,borderRadius:10,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:15,color:T.sub,isolation:"isolate",transform:"translateZ(0)"}}>⚙️</button>
             </div>
           </div>
         </div>
@@ -838,7 +1001,7 @@ function App(){
             ):zenMode?(
               <ZenMode habits={todayHabs} localProg={localProg} onPct={handleProg} onCommit={(id,p)=>{handleProg(id,p);handleCommit(id,p);}} T={T}/>
             ):(
-              <SortedHabitList habits={todayHabs} localProg={localProg} logs={logs} onPct={handleProg} onCommit={handleCommit} onEdit={h=>{setEditHab(h);setShowForm(true);}} T={T} onOvershot={handleOvershot}/>
+              <SortedHabitList habits={habits.filter(h=>h.frequency!=="xperweek"?true:true)} localProg={localProg} logs={logs} onPct={handleProg} onCommit={handleCommit} onEdit={h=>{setEditHab(h);setShowForm(true);}} T={T} onOvershot={handleOvershot} subtaskLogsByHabit={todaySubtaskLogs} onToggleSubtask={handleToggleSubtask}/>
             )}
             {!zenMode&&todayHabs.length>0&&!allDone&&!todayMood&&(
               <button onClick={()=>{setMoodCeleb(false);setShowMood(true);}} style={{marginTop:10,width:"100%",padding:"9px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:11,color:T.sub,fontSize:12,cursor:"pointer"}}>
@@ -899,14 +1062,11 @@ function App(){
           <h2 style={{margin:0,fontSize:17,fontWeight:700,color:T.text}}>Paramètres</h2>
           <button onClick={()=>setShowSettings(false)} style={{background:T.accentLight,border:"none",borderRadius:20,width:30,height:30,cursor:"pointer",color:T.sub,fontSize:14}}>✕</button>
         </div>
-
-        {/* Tabs settings */}
         <div style={{display:"flex",gap:6,marginBottom:20}}>
           {[{k:"stats",l:"Stats"},{k:"succes",l:"Succès"},{k:"theme",l:"Thème"},{k:"zen",l:"Zen"}].map(({k,l})=>(
             <button key={k} onClick={()=>setSettingsTab(k)} style={{flex:1,padding:"7px 4px",borderRadius:9,border:`1.5px solid ${settingsTab===k?T.accent:T.border}`,background:settingsTab===k?T.accentLight:"transparent",color:settingsTab===k?T.accent:T.sub,cursor:"pointer",fontSize:11,fontWeight:settingsTab===k?600:400}}>{l}</button>
           ))}
         </div>
-
         {settingsTab==="stats"&&(
           <div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:12}}>
@@ -925,11 +1085,9 @@ function App(){
             </div>
           </div>
         )}
-
         {settingsTab==="succes"&&(
           <AchievementsPanel masterStreak={masterStreak} bestStreak={bestStreak} perfectDays={perfectDays} habitCount={habits.length} overshots={overshots} T={T}/>
         )}
-
         {settingsTab==="theme"&&(
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
             {Object.entries(THEMES).map(([key,th])=>{
@@ -943,7 +1101,6 @@ function App(){
             })}
           </div>
         )}
-
         {settingsTab==="zen"&&(
           <div style={{background:T.accentLight,borderRadius:12,padding:13,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div>
