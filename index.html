@@ -672,7 +672,7 @@ function YearCalendar({year,habits,logs,moods,onDay,T}){
   );
 }
 
-// ── DESIGN B : Timeline verticale ──
+// ── DESIGN C : Grandes cartes par jour ──
 function HistoriqueView({habits,logs,moods,onDay,T}){
   const EMERALD=T.emerald;
   const td=today();
@@ -714,66 +714,71 @@ function HistoriqueView({habits,logs,moods,onDay,T}){
     if(sc===0)return T.muted;if(sc<50)return"rgba(251,146,60,0.3)";if(sc<100)return"rgba(250,204,21,0.3)";return`${EMERALD}55`;
   };
 
-  // SEMAINE : liste verticale de jours, tap pour déplier
+  // SEMAINE : grandes cartes empilées
   const renderSemaine=()=>{
     const weekDays=getWeekDays(offset);
     return(
-      <div style={{display:"flex",flexDirection:"column",gap:0,position:"relative"}}>
-        {/* Ligne verticale */}
-        <div style={{position:"absolute",left:19,top:20,bottom:20,width:2,background:T.border,borderRadius:2}}/>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
         {weekDays.map((d,i)=>{
           const sc=dayScore(habits,logs,d)??0;
           const md=moods[d]?MOODS[moods[d].mood]:null;
           const isT=d===td,isFut=d>td,isSel=d===selectedDay;
           const selHabs=habits.filter(h=>scheduled(h,d));
-          const dotColor=sc>=100?EMERALD:sc>0?"rgba(250,204,21,0.9)":T.muted;
+          const doneCount=selHabs.filter(h=>(logs[d]?.[h.id]||0)>=100).length;
+          // Couleur de fond de carte selon score
+          const cardAccent=sc>=100?EMERALD:sc>=50?"rgba(250,204,21,0.6)":sc>0?"rgba(251,146,60,0.5)":T.muted;
           return(
-            <div key={d}>
-              <button onClick={()=>!isFut&&setSelectedDay(isSel?null:d)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",background:"none",border:"none",cursor:isFut?"default":"pointer",width:"100%",textAlign:"left",position:"relative",zIndex:1}}>
-                {/* Dot sur la timeline */}
-                <div style={{width:18,height:18,borderRadius:"50%",background:isFut?T.muted:dotColor,border:`2px solid ${isT?T.accent:T.bg}`,flexShrink:0,marginLeft:10,boxShadow:isT?`0 0 0 3px ${T.accent}22`:"none",transition:"all .2s"}}/>
-                {/* Info jour */}
-                <div style={{flex:1,display:"flex",alignItems:"center",gap:8}}>
-                  <div>
-                    <div style={{fontSize:12,fontWeight:isSel||isT?700:500,color:isFut?T.muted:isT?T.accent:T.text,textTransform:"capitalize"}}>
-                      {new Date(d+"T12:00:00").toLocaleDateString("fr-FR",{weekday:"short",day:"numeric"})}
-                      {isT&&<span style={{fontSize:9,background:T.accent,color:T.dark?"#111":"#fff",borderRadius:20,padding:"1px 5px",marginLeft:5,fontWeight:600}}>Aujourd'hui</span>}
-                    </div>
-                    {!isFut&&sc>0&&<div style={{fontSize:10,color:sc>=100?EMERALD:T.sub,marginTop:1}}>{sc}% complété</div>}
-                  </div>
-                  {md&&<span style={{fontSize:16,marginLeft:"auto"}}>{md.emoji}</span>}
-                  {!isFut&&sc>0&&!md&&(
-                    <div style={{marginLeft:"auto",display:"flex",gap:2}}>
-                      {selHabs.slice(0,4).map(h=>(
-                        <span key={h.id} style={{fontSize:11,opacity:(logs[d]?.[h.id]||0)>=100?1:0.3}}>{h.emoji}</span>
-                      ))}
-                    </div>
+            <div key={d} style={{borderRadius:14,overflow:"hidden",border:`1px solid ${isSel?T.accent:isT?T.accent+"44":T.border}`,transition:"all .2s",opacity:isFut?0.4:1}}>
+              {/* Bande colorée en haut */}
+              {!isFut&&sc>0&&<div style={{height:3,background:cardAccent,width:`${sc}%`,transition:"width .4s"}}/>}
+              <button onClick={()=>!isFut&&setSelectedDay(isSel?null:d)}
+                style={{width:"100%",background:isSel?T.accentLight:T.card,border:"none",cursor:isFut?"default":"pointer",padding:"11px 14px",display:"flex",alignItems:"center",gap:10,textAlign:"left"}}>
+                {/* Numéro du jour */}
+                <div style={{width:36,height:36,borderRadius:10,background:isT?T.accent:T.muted+"44",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <span style={{fontSize:7,color:isT?T.dark?"#111":"#fff":T.sub,textTransform:"uppercase",lineHeight:1}}>{DAYS_FR[i]}</span>
+                  <span style={{fontSize:15,fontWeight:700,color:isT?T.dark?"#111":"#fff":T.text,lineHeight:1.1}}>{new Date(d+"T12:00:00").getDate()}</span>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  {!isFut&&selHabs.length>0?(
+                    <>
+                      <div style={{fontSize:12,fontWeight:600,color:sc>=100?EMERALD:T.text}}>{doneCount}/{selHabs.length} habitudes</div>
+                      {/* Emojis des habitudes */}
+                      <div style={{display:"flex",gap:3,marginTop:3,flexWrap:"wrap"}}>
+                        {selHabs.map(h=>(
+                          <span key={h.id} style={{fontSize:13,opacity:(logs[d]?.[h.id]||0)>=100?1:0.25,transition:"opacity .2s"}}>{h.emoji}</span>
+                        ))}
+                      </div>
+                    </>
+                  ):(
+                    <div style={{fontSize:11,color:T.muted}}>{isFut?"À venir":"Rien de prévu"}</div>
                   )}
                 </div>
-                {!isFut&&<span style={{fontSize:10,color:T.muted,paddingRight:4}}>{isSel?"▲":"▼"}</span>}
+                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
+                  {md&&<span style={{fontSize:16}}>{md.emoji}</span>}
+                  {!isFut&&sc>0&&<span style={{fontSize:11,fontWeight:700,color:sc>=100?EMERALD:T.sub,fontFamily:"monospace"}}>{sc}%</span>}
+                  {!isFut&&selHabs.length>0&&<span style={{fontSize:10,color:T.muted}}>{isSel?"▲":"▼"}</span>}
+                </div>
               </button>
               {/* Détail déplié */}
               {isSel&&!isFut&&(
-                <div style={{marginLeft:40,marginBottom:8,animation:"fadeUp .18s ease both"}}>
-                  {selHabs.length===0?(
-                    <div style={{fontSize:11,color:T.sub,padding:"6px 0"}}>Rien de prévu</div>
-                  ):(
-                    <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                      {selHabs.map(h=>{
-                        const v=logs[d]?.[h.id]||0,prog=fmtProgress(h,v),done=v>=100;
-                        return(
-                          <div key={h.id} style={{background:T.card,borderRadius:10,padding:"8px 11px",display:"flex",alignItems:"center",gap:8,border:`1px solid ${done?EMERALD+"33":T.border}`}}>
-                            <span style={{fontSize:14}}>{h.emoji}</span>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:12,fontWeight:600,color:done?EMERALD:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{h.name}</div>
-                              {prog&&<div style={{fontSize:10,color:done?EMERALD:T.sub}}>{prog}</div>}
-                            </div>
-                            {v===0?<span style={{color:"#f87171",fontSize:11}}>—</span>:done?<span style={{color:EMERALD,fontSize:11,fontWeight:700}}>✓</span>:<span style={{color:T.sub,fontSize:11}}>{v}%</span>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                <div style={{borderTop:`1px solid ${T.border}`,padding:"10px 14px",display:"flex",flexDirection:"column",gap:6,animation:"fadeUp .18s ease both"}}>
+                  {selHabs.map(h=>{
+                    const v=logs[d]?.[h.id]||0,prog=fmtProgress(h,v),done=v>=100;
+                    return(
+                      <div key={h.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:`1px solid ${T.muted}44`}}>
+                        <div style={{width:28,height:28,borderRadius:8,background:done?EMERALD+"22":T.muted+"33",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          <span style={{fontSize:13}}>{done?"✓":h.emoji}</span>
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:500,color:done?EMERALD:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{h.name}</div>
+                          {prog&&<div style={{fontSize:10,color:T.sub}}>{prog}</div>}
+                        </div>
+                        <div style={{width:32,height:4,borderRadius:2,background:T.muted+"44",overflow:"hidden",flexShrink:0}}>
+                          <div style={{height:"100%",width:`${Math.min(v,100)}%`,background:done?EMERALD:"rgba(250,204,21,0.8)",borderRadius:2}}/>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -788,20 +793,18 @@ function HistoriqueView({habits,logs,moods,onDay,T}){
     return(
       <div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
-          {DAYS_FR.map(d=><div key={d} style={{fontSize:8,color:T.muted,textAlign:"center",paddingBottom:4,fontWeight:600}}>{d[0]}</div>)}
+          {DAYS_FR.map(d=><div key={d} style={{fontSize:8,color:T.muted,textAlign:"center",paddingBottom:4,fontWeight:600,textTransform:"uppercase"}}>{d[0]}</div>)}
           {days.map((d,i)=>{
-            const isT=d===td,sc=d&&d<=td?dayScore(habits,logs,d)??0:null;
-            const bg=cellBg(d);
+            const isT=d===td;
             return(
               <button key={i} onClick={()=>d&&d<=td&&onDay(d)}
-                style={{aspectRatio:"1",borderRadius:6,background:bg,border:`1.5px solid ${isT?T.accent:"transparent"}`,cursor:d&&d<=td?"pointer":"default",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1}}>
-                {d&&<span style={{fontSize:8,color:T.dark?"rgba(255,255,255,0.5)":"rgba(0,0,0,0.3)",fontWeight:500,lineHeight:1}}>{new Date(d+"T12:00:00").getDate()}</span>}
-                {d&&moods[d]&&<span style={{fontSize:8,lineHeight:1}}>{MOODS[moods[d].mood].emoji}</span>}
+                style={{aspectRatio:"1",borderRadius:8,background:cellBg(d),border:`2px solid ${isT?T.accent:"transparent"}`,cursor:d&&d<=td?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {d&&<span style={{fontSize:9,color:T.dark?"rgba(255,255,255,0.45)":"rgba(0,0,0,0.3)",fontWeight:600}}>{new Date(d+"T12:00:00").getDate()}</span>}
               </button>
             );
           })}
         </div>
-        <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap"}}>
           {MOODS.map((m,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:T.sub}}><div style={{width:7,height:7,borderRadius:2,background:m.color+"99"}}/>{m.emoji}</div>)}
           <div style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:T.sub}}><div style={{width:7,height:7,borderRadius:2,background:`${EMERALD}55`}}/><span>100%</span></div>
         </div>
@@ -818,7 +821,7 @@ function HistoriqueView({habits,logs,moods,onDay,T}){
             <div style={{fontSize:10,fontWeight:600,color:T.sub,marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>{MONTHS_FULL[m]}</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
               {DAYS_FR.map(d=><div key={d} style={{fontSize:7,color:T.muted,textAlign:"center",paddingBottom:2}}>{d[0]}</div>)}
-              {days.map((d,i)=>(<button key={i} onClick={()=>d&&d<=td&&onDay(d)} style={{aspectRatio:"1",borderRadius:2,background:cellBg(d),border:`1px solid ${d===td?T.accent:"transparent"}`,cursor:d&&d<=td?"pointer":"default"}}/>))}
+              {days.map((d,i)=>(<button key={i} onClick={()=>d&&d<=td&&onDay(d)} style={{aspectRatio:"1",borderRadius:3,background:cellBg(d),border:`1px solid ${d===td?T.accent:"transparent"}`,cursor:d&&d<=td?"pointer":"default"}}/>))}
             </div>
           </div>
         ))}
@@ -848,7 +851,6 @@ function HistoriqueView({habits,logs,moods,onDay,T}){
     </div>
   );
 }
-
 // ── SORTED HABIT LIST ──
 function SortedHabitList({habits,localProg,logs,onPct,onCommit,onEdit,T,onOvershot,subtaskLogsByHabit,onToggleSubtask}){
   const cardRefs=useRef({});
