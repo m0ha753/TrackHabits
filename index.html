@@ -672,7 +672,7 @@ function YearCalendar({year,habits,logs,moods,onDay,T}){
   );
 }
 
-// ── HISTORIQUE VIEW (Semaine / Mois / Année) ──
+// ── DESIGN C : Grandes cartes par jour ──
 function HistoriqueView({habits,logs,moods,onDay,T}){
   const EMERALD=T.emerald;
   const td=today();
@@ -680,32 +680,19 @@ function HistoriqueView({habits,logs,moods,onDay,T}){
   const[offset,setOffset]=useState(0);
   const[selectedDay,setSelectedDay]=useState(td);
 
-  // ── helpers navigation ──
   const getWeekDays=(off)=>{
-    const days=[];
-    const now=new Date();
-    const dow=(now.getDay()+6)%7;
-    for(let i=0;i<7;i++){
-      const x=new Date(now);
-      x.setDate(now.getDate()-dow+i+off*7);
-      days.push(x.toISOString().split("T")[0]);
-    }
+    const days=[],now=new Date(),dow=(now.getDay()+6)%7;
+    for(let i=0;i<7;i++){const x=new Date(now);x.setDate(now.getDate()-dow+i+off*7);days.push(x.toISOString().split("T")[0]);}
     return days;
   };
-
   const getMonthDays=(off)=>{
-    const now=new Date();
-    const y=now.getFullYear(),m=now.getMonth()+off;
-    const base=new Date(y,m,1);
-    const year=base.getFullYear(),month=base.getMonth();
-    const first=new Date(year,month,1);
-    const last=new Date(year,month+1,0).getDate();
-    const days=[];
+    const now=new Date(),y=now.getFullYear(),m=now.getMonth()+off;
+    const base=new Date(y,m,1),year=base.getFullYear(),month=base.getMonth();
+    const first=new Date(year,month,1),last=new Date(year,month+1,0).getDate(),days=[];
     for(let i=0;i<(first.getDay()+6)%7;i++)days.push(null);
     for(let d=1;d<=last;d++)days.push(`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`);
-    return{days,label:`${MONTHS_FULL[month]} ${year}`,month,year};
+    return{days,label:`${MONTHS_FULL[month]} ${year}`};
   };
-
   const getYearMonths=(off)=>{
     const year=new Date().getFullYear()+off;
     return Array.from({length:12},(_,m)=>{
@@ -715,18 +702,11 @@ function HistoriqueView({habits,logs,moods,onDay,T}){
       return{m,days};
     });
   };
-
   const navLabel=()=>{
-    if(zoom==="semaine"){
-      const days=getWeekDays(offset);
-      const s=new Date(days[0]+"T12:00:00"),e=new Date(days[6]+"T12:00:00");
-      if(s.getMonth()===e.getMonth())return`${s.getDate()} – ${e.getDate()} ${MONTHS_FULL[s.getMonth()]}`;
-      return`${s.getDate()} ${MONTHS_FULL[s.getMonth()].slice(0,3)} – ${e.getDate()} ${MONTHS_FULL[e.getMonth()].slice(0,3)}`;
-    }
-    if(zoom==="mois"){const{label}=getMonthDays(offset);return label;}
+    if(zoom==="semaine"){const days=getWeekDays(offset);const s=new Date(days[0]+"T12:00:00"),e=new Date(days[6]+"T12:00:00");return s.getMonth()===e.getMonth()?`${s.getDate()} – ${e.getDate()} ${MONTHS_FULL[s.getMonth()]}`:`${s.getDate()} ${MONTHS_FULL[s.getMonth()].slice(0,3)} – ${e.getDate()} ${MONTHS_FULL[e.getMonth()].slice(0,3)}`;}
+    if(zoom==="mois")return getMonthDays(offset).label;
     return`${new Date().getFullYear()+offset}`;
   };
-
   const cellBg=(d)=>{
     if(!d||d>td)return"transparent";
     const mood=moods[d];if(mood)return MOODS[mood.mood].color+"99";
@@ -734,103 +714,93 @@ function HistoriqueView({habits,logs,moods,onDay,T}){
     if(sc===0)return T.muted;if(sc<50)return"rgba(251,146,60,0.3)";if(sc<100)return"rgba(250,204,21,0.3)";return`${EMERALD}55`;
   };
 
-  const handleDayClick=(d)=>{
-    if(!d||d>td)return;
-    setSelectedDay(d);
-    if(zoom!=="semaine")onDay(d);
-  };
-
-  // Vue semaine
+  // SEMAINE : grandes cartes empilées
   const renderSemaine=()=>{
     const weekDays=getWeekDays(offset);
-    const selHabs=habits.filter(h=>scheduled(h,selectedDay));
     return(
-      <>
-        {/* Rings des jours */}
-        <div style={{display:"flex",justifyContent:"space-between",gap:4,marginBottom:16}}>
-          {weekDays.map((d,i)=>{
-            const sc=dayScore(habits,logs,d)??0;
-            const md=moods[d]?MOODS[moods[d].mood]:null;
-            const isT=d===td;
-            const isSel=d===selectedDay;
-            const ringSize=42;
-            return(
-              <button key={d} onClick={()=>handleDayClick(d)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,background:isSel?T.accentLight:"transparent",border:`1.5px solid ${isSel?T.accent:isT?T.accent+"44":"transparent"}`,borderRadius:12,padding:"8px 2px",cursor:d>td?"default":"pointer",transition:"all .2s"}}>
-                <span style={{fontSize:9,color:isSel?T.accent:isT?T.accent:T.sub,fontWeight:isSel||isT?700:400,textTransform:"uppercase"}}>{DAYS_FR[i]}</span>
-                <div style={{position:"relative",width:ringSize,height:ringSize}}>
-                  <Ring pct={sc} size={ringSize} stroke={3} hideText T={T}/>
-                  <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    {sc>=100
-                      ?<span style={{fontSize:14}}>✓</span>
-                      :md?<span style={{fontSize:13}}>{md.emoji}</span>
-                      :<span style={{fontSize:9,fontWeight:700,color:sc>0?T.accent:T.muted,fontFamily:"monospace"}}>{d<=td&&sc>0?`${sc}%`:""}</span>
-                    }
-                  </div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {weekDays.map((d,i)=>{
+          const sc=dayScore(habits,logs,d)??0;
+          const md=moods[d]?MOODS[moods[d].mood]:null;
+          const isT=d===td,isFut=d>td,isSel=d===selectedDay;
+          const selHabs=habits.filter(h=>scheduled(h,d));
+          const doneCount=selHabs.filter(h=>(logs[d]?.[h.id]||0)>=100).length;
+          // Couleur de fond de carte selon score
+          const cardAccent=sc>=100?EMERALD:sc>=50?"rgba(250,204,21,0.6)":sc>0?"rgba(251,146,60,0.5)":T.muted;
+          return(
+            <div key={d} style={{borderRadius:14,overflow:"hidden",border:`1px solid ${isSel?T.accent:isT?T.accent+"44":T.border}`,transition:"all .2s",opacity:isFut?0.4:1}}>
+              {/* Bande colorée en haut */}
+              {!isFut&&sc>0&&<div style={{height:3,background:cardAccent,width:`${sc}%`,transition:"width .4s"}}/>}
+              <button onClick={()=>!isFut&&setSelectedDay(isSel?null:d)}
+                style={{width:"100%",background:isSel?T.accentLight:T.card,border:"none",cursor:isFut?"default":"pointer",padding:"11px 14px",display:"flex",alignItems:"center",gap:10,textAlign:"left"}}>
+                {/* Numéro du jour */}
+                <div style={{width:36,height:36,borderRadius:10,background:isT?T.accent:T.muted+"44",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <span style={{fontSize:7,color:isT?T.dark?"#111":"#fff":T.sub,textTransform:"uppercase",lineHeight:1}}>{DAYS_FR[i]}</span>
+                  <span style={{fontSize:15,fontWeight:700,color:isT?T.dark?"#111":"#fff":T.text,lineHeight:1.1}}>{new Date(d+"T12:00:00").getDate()}</span>
                 </div>
-                <span style={{fontSize:10,fontWeight:isSel?700:400,color:isSel?T.accent:isT?T.accent:T.sub}}>{new Date(d+"T12:00:00").getDate()}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  {!isFut&&selHabs.length>0?(
+                    <>
+                      <div style={{fontSize:12,fontWeight:600,color:sc>=100?EMERALD:T.text}}>{doneCount}/{selHabs.length} habitudes</div>
+                      {/* Emojis des habitudes */}
+                      <div style={{display:"flex",gap:3,marginTop:3,flexWrap:"wrap"}}>
+                        {selHabs.map(h=>(
+                          <span key={h.id} style={{fontSize:13,opacity:(logs[d]?.[h.id]||0)>=100?1:0.25,transition:"opacity .2s"}}>{h.emoji}</span>
+                        ))}
+                      </div>
+                    </>
+                  ):(
+                    <div style={{fontSize:11,color:T.muted}}>{isFut?"À venir":"Rien de prévu"}</div>
+                  )}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
+                  {md&&<span style={{fontSize:16}}>{md.emoji}</span>}
+                  {!isFut&&sc>0&&<span style={{fontSize:11,fontWeight:700,color:sc>=100?EMERALD:T.sub,fontFamily:"monospace"}}>{sc}%</span>}
+                  {!isFut&&selHabs.length>0&&<span style={{fontSize:10,color:T.muted}}>{isSel?"▲":"▼"}</span>}
+                </div>
               </button>
-            );
-          })}
-        </div>
-
-        {/* Détail du jour sélectionné */}
-        {selectedDay&&weekDays.includes(selectedDay)&&(
-          <div style={{animation:"fadeUp .2s ease both"}}>
-            <div style={{fontSize:11,fontWeight:600,color:T.sub,textTransform:"capitalize",marginBottom:10}}>
-              {new Date(selectedDay+"T12:00:00").toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}
-              {moods[selectedDay]&&<span style={{marginLeft:6,fontSize:13}}>{MOODS[moods[selectedDay].mood].emoji}</span>}
-            </div>
-            {selHabs.length===0?(
-              <div style={{textAlign:"center",padding:"20px 0",color:T.sub,fontSize:12}}>Rien de prévu ce jour</div>
-            ):(
-              <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                {selHabs.map(h=>{
-                  const v=logs[selectedDay]?.[h.id]||0;
-                  const prog=fmtProgress(h,v);
-                  const exc=v>100;
-                  const done=v>=100;
-                  return(
-                    <div key={h.id} style={{background:T.card,borderRadius:11,padding:"10px 13px",display:"flex",alignItems:"center",gap:10,border:`1px solid ${done?EMERALD+"33":T.border}`,position:"relative",overflow:"hidden"}}>
-                      <div style={{position:"absolute",left:0,top:0,bottom:0,width:`${Math.min(v,100)}%`,background:`${EMERALD}07`,pointerEvents:"none"}}/>
-                      <div style={{position:"relative",width:32,height:32,flexShrink:0}}>
-                        <Ring pct={v} size={32} stroke={2.5} hideText T={T}/>
-                        <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                          <span style={{fontSize:12}}>{done?"✓":h.emoji}</span>
+              {/* Détail déplié */}
+              {isSel&&!isFut&&(
+                <div style={{borderTop:`1px solid ${T.border}`,padding:"10px 14px",display:"flex",flexDirection:"column",gap:6,animation:"fadeUp .18s ease both"}}>
+                  {selHabs.map(h=>{
+                    const v=logs[d]?.[h.id]||0,prog=fmtProgress(h,v),done=v>=100;
+                    return(
+                      <div key={h.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:`1px solid ${T.muted}44`}}>
+                        <div style={{width:28,height:28,borderRadius:8,background:done?EMERALD+"22":T.muted+"33",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          <span style={{fontSize:13}}>{done?"✓":h.emoji}</span>
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:500,color:done?EMERALD:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{h.name}</div>
+                          {prog&&<div style={{fontSize:10,color:T.sub}}>{prog}</div>}
+                        </div>
+                        <div style={{width:32,height:4,borderRadius:2,background:T.muted+"44",overflow:"hidden",flexShrink:0}}>
+                          <div style={{height:"100%",width:`${Math.min(v,100)}%`,background:done?EMERALD:"rgba(250,204,21,0.8)",borderRadius:2}}/>
                         </div>
                       </div>
-                      <div style={{flex:1,position:"relative",minWidth:0}}>
-                        <div style={{fontWeight:600,fontSize:13,color:done?EMERALD:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{h.name}</div>
-                        {prog&&<div style={{fontSize:11,color:done?EMERALD:T.sub,marginTop:1}}>{prog}{exc?" ↑":""}</div>}
-                      </div>
-                      <div style={{position:"relative",flexShrink:0}}>
-                        {v===0?<span style={{color:"#f87171",fontSize:11,fontWeight:500}}>—</span>
-                        :done?<span style={{color:EMERALD,fontSize:11,fontWeight:600}}>✓</span>
-                        :<span style={{color:T.sub,fontSize:11,fontWeight:600}}>{v}%</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-      </>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     );
   };
 
-  // Vue mois
   const renderMois=()=>{
-    const{days,label}=getMonthDays(offset);
+    const{days}=getMonthDays(offset);
     return(
       <div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
-          {DAYS_FR.map(d=><div key={d} style={{fontSize:8,color:T.muted,textAlign:"center",paddingBottom:3}}>{d[0]}</div>)}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+          {DAYS_FR.map(d=><div key={d} style={{fontSize:8,color:T.muted,textAlign:"center",paddingBottom:4,fontWeight:600,textTransform:"uppercase"}}>{d[0]}</div>)}
           {days.map((d,i)=>{
             const isT=d===td;
             return(
-              <button key={i} onClick={()=>handleDayClick(d)}
-                style={{aspectRatio:"1",borderRadius:4,background:cellBg(d),border:`1.5px solid ${isT?T.accent:"transparent"}`,cursor:d&&d<=td?"pointer":"default",transition:"transform .1s"}}
-              />
+              <button key={i} onClick={()=>d&&d<=td&&onDay(d)}
+                style={{aspectRatio:"1",borderRadius:8,background:cellBg(d),border:`2px solid ${isT?T.accent:"transparent"}`,cursor:d&&d<=td?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {d&&<span style={{fontSize:9,color:T.dark?"rgba(255,255,255,0.45)":"rgba(0,0,0,0.3)",fontWeight:600}}>{new Date(d+"T12:00:00").getDate()}</span>}
+              </button>
             );
           })}
         </div>
@@ -842,21 +812,16 @@ function HistoriqueView({habits,logs,moods,onDay,T}){
     );
   };
 
-  // Vue année
   const renderAnnee=()=>{
     const months=getYearMonths(offset);
     return(
-      <div style={{display:"flex",flexDirection:"column",gap:16}}>
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
         {months.map(({m,days})=>(
           <div key={m}>
             <div style={{fontSize:10,fontWeight:600,color:T.sub,marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>{MONTHS_FULL[m]}</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
               {DAYS_FR.map(d=><div key={d} style={{fontSize:7,color:T.muted,textAlign:"center",paddingBottom:2}}>{d[0]}</div>)}
-              {days.map((d,i)=>(
-                <button key={i} onClick={()=>handleDayClick(d)}
-                  style={{aspectRatio:"1",borderRadius:2,background:cellBg(d),border:`1px solid ${d===td?T.accent:"transparent"}`,cursor:d&&d<=td?"pointer":"default"}}
-                />
-              ))}
+              {days.map((d,i)=>(<button key={i} onClick={()=>d&&d<=td&&onDay(d)} style={{aspectRatio:"1",borderRadius:3,background:cellBg(d),border:`1px solid ${d===td?T.accent:"transparent"}`,cursor:d&&d<=td?"pointer":"default"}}/>))}
             </div>
           </div>
         ))}
@@ -870,27 +835,22 @@ function HistoriqueView({habits,logs,moods,onDay,T}){
 
   return(
     <div>
-      {/* Sélecteur zoom */}
       <div style={{display:"flex",gap:5,marginBottom:14}}>
         {["semaine","mois","année"].map(z=>(
           <button key={z} onClick={()=>{setZoom(z);setOffset(0);}} style={{flex:1,padding:"7px 4px",borderRadius:9,border:`1.5px solid ${zoom===z?T.accent:T.border}`,background:zoom===z?T.accentLight:"transparent",color:zoom===z?T.accent:T.sub,cursor:"pointer",fontSize:11,fontWeight:zoom===z?600:400,fontFamily:"'DM Sans',sans-serif",textTransform:"capitalize"}}>{z}</button>
         ))}
       </div>
-
-      {/* Navigation période */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
         <button onClick={()=>setOffset(o=>o-1)} style={{background:T.accentLight,border:`1px solid ${T.border}`,borderRadius:9,padding:"5px 14px",color:T.text,cursor:"pointer",fontSize:14}}>‹</button>
         <span style={{fontWeight:600,fontSize:13,color:T.text}}>{navLabel()}</span>
         <button onClick={()=>setOffset(o=>Math.min(o+1,0))} style={{background:T.accentLight,border:`1px solid ${T.border}`,borderRadius:9,padding:"5px 14px",color:offset===0?T.muted:T.text,cursor:offset===0?"default":"pointer",fontSize:14}} disabled={offset===0}>›</button>
       </div>
-
       {zoom==="semaine"&&renderSemaine()}
       {zoom==="mois"&&renderMois()}
       {zoom==="année"&&renderAnnee()}
     </div>
   );
 }
-
 // ── SORTED HABIT LIST ──
 function SortedHabitList({habits,localProg,logs,onPct,onCommit,onEdit,T,onOvershot,subtaskLogsByHabit,onToggleSubtask}){
   const cardRefs=useRef({});
@@ -1169,7 +1129,7 @@ function App(){
             ):zenMode?(
               <ZenMode habits={todayHabs} localProg={localProg} onPct={handleProg} onCommit={(id,p)=>{handleProg(id,p);handleCommit(id,p);}} T={T}/>
             ):(
-              <SortedHabitList habits={habits.filter(h=>h.frequency!=="xperweek"?true:true)} localProg={localProg} logs={logs} onPct={handleProg} onCommit={handleCommit} onEdit={h=>{setEditHab(h);setShowForm(true);}} T={T} onOvershot={handleOvershot} subtaskLogsByHabit={todaySubtaskLogs} onToggleSubtask={handleToggleSubtask}/>
+              <SortedHabitList habits={todayHabs} localProg={localProg} logs={logs} onPct={handleProg} onCommit={handleCommit} onEdit={h=>{setEditHab(h);setShowForm(true);}} T={T} onOvershot={handleOvershot} subtaskLogsByHabit={todaySubtaskLogs} onToggleSubtask={handleToggleSubtask}/>
             )}
             {!zenMode&&todayHabs.length>0&&!allDone&&!todayMood&&(
               <button onClick={()=>{setMoodCeleb(false);setShowMood(true);}} style={{marginTop:10,width:"100%",padding:"9px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:11,color:T.sub,fontSize:12,cursor:"pointer"}}>
