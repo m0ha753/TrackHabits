@@ -28,6 +28,10 @@
     @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
     @keyframes streakOverlayIn { from{opacity:0} to{opacity:1} }
     @keyframes streakOut { from{opacity:1} to{opacity:0} }
+    @keyframes flameGrow { 0%{transform:scale(0.4);opacity:0} 60%{transform:scale(1.15);opacity:1} 100%{transform:scale(1);opacity:1} }
+    @keyframes numPop { 0%{transform:scale(0.6);opacity:0} 60%{transform:scale(1.25)} 100%{transform:scale(1);opacity:1} }
+    .flame-grow { animation:flameGrow 0.5s cubic-bezier(.34,1.56,.64,1) both; }
+    .num-pop { animation:numPop 0.4s cubic-bezier(.34,1.56,.64,1) both; }
     @keyframes inputSlideIn { from{opacity:0} to{opacity:1} }
     @keyframes subtaskExpand { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
     .habit-new { animation:popIn .3s ease both }
@@ -70,6 +74,7 @@ const dow=d=>(new Date(d+"T12:00:00").getDay()+6)%7;
 const shift=(d,n)=>{const x=new Date(d+"T12:00:00");x.setDate(x.getDate()+n);return x.toISOString().split("T")[0];};
 const scheduled=(h,d)=>{
   if(h.paused)return false;
+  if(h.createdAt&&d<h.createdAt)return false;
   return h.frequency==="daily"?true:h.frequency==="weekly"?(h.days||[]).includes(dow(d)):true;
 };
 
@@ -98,31 +103,6 @@ function snapPct(rawPct,hab){
   const step=10/qty;return Math.max(0,Math.min(100,Math.round(rawPct/step)*step));
 }
 
-// ── SUCCÈS ──
-const ACHIEVEMENTS=[
-  {id:"s1",cat:"streak",icon:"🔥",label:"Day 1",desc:"Premier jour de streak",check:(ms)=>ms>=1},
-  {id:"s2",cat:"streak",icon:"🔥",label:"En bonne route",desc:"7 jours de suite",check:(ms)=>ms>=7},
-  {id:"s3",cat:"streak",icon:"🔥",label:"Fidèle au poste",desc:"30 jours de suite",check:(ms)=>ms>=30},
-  {id:"s4",cat:"streak",icon:"🔥",label:"En mission",desc:"100 jours de suite",check:(ms)=>ms>=100},
-  {id:"s5",cat:"streak",icon:"🔥",label:"Qui es-tu ?",desc:"365 jours de suite",check:(ms)=>ms>=365},
-  {id:"p1",cat:"perfect",icon:"⭐",label:"Belle journée",desc:"1 journée parfaite",check:(_,pd)=>pd>=1},
-  {id:"p2",cat:"perfect",icon:"⭐",label:"Semaine en or",desc:"7 journées parfaites",check:(_,pd)=>pd>=7},
-  {id:"p3",cat:"perfect",icon:"⭐",label:"Mois exemplaire",desc:"30 journées parfaites",check:(_,pd)=>pd>=30},
-  {id:"p4",cat:"perfect",icon:"⭐",label:"Centurion",desc:"100 journées parfaites",check:(_,pd)=>pd>=100},
-  {id:"p5",cat:"perfect",icon:"⭐",label:"Intouchable",desc:"200 journées parfaites",check:(_,pd)=>pd>=200},
-  {id:"p6",cat:"perfect",icon:"⭐",label:"Renouveau",desc:"365 journées parfaites",check:(_,pd)=>pd>=365},
-  {id:"h1",cat:"habits",icon:"📦",label:"Le début",desc:"1ère habitude créée",check:(_,__,hc)=>hc>=1},
-  {id:"h2",cat:"habits",icon:"📦",label:"Structuré",desc:"5 habitudes actives",check:(_,__,hc)=>hc>=5},
-  {id:"h3",cat:"habits",icon:"📦",label:"Déter",desc:"10 habitudes actives",check:(_,__,hc)=>hc>=10},
-  {id:"h4",cat:"habits",icon:"📦",label:"Obsédé",desc:"15 habitudes actives",check:(_,__,hc)=>hc>=15},
-  {id:"h5",cat:"habits",icon:"📦",label:"Dose...",desc:"20 habitudes actives",check:(_,__,hc)=>hc>=20},
-  {id:"o1",cat:"over",icon:"💪",label:"Tant qu'on y est",desc:"Dépasser son objectif 1 fois",check:(_,__,___,os)=>os>=1},
-  {id:"o2",cat:"over",icon:"💪",label:"Chaud",desc:"5 dépassements",check:(_,__,___,os)=>os>=5},
-  {id:"o3",cat:"over",icon:"💪",label:"Dans l'excès",desc:"10 dépassements",check:(_,__,___,os)=>os>=10},
-  {id:"o4",cat:"over",icon:"💪",label:"Plus Ultra",desc:"50 dépassements",check:(_,__,___,os)=>os>=50},
-  {id:"o5",cat:"over",icon:"💪",label:"Phénomène",desc:"100 dépassements",check:(_,__,___,os)=>os>=100},
-];
-
 function FlameSVG({size=24,color="#ff7030",innerColor="rgba(255,255,180,0.7)"}){
   return(
     <svg width={size} height={size} viewBox="0 0 32 36" fill="none">
@@ -142,19 +122,22 @@ function FlameStreak({masterStreak,T}){
   );
 }
 
-// ── Célébration de streak : sobre, brève, sans plein écran flashy ──
+// ── Célébration de streak : flamme qui grandit, chiffre qui incrémente (façon Duolingo) ──
 function StreakCelebration({newStreak,onDone,T}){
   const fc=T.flame;
   const[phase,setPhase]=useState("in");
+  const[displayNum,setDisplayNum]=useState(Math.max(0,newStreak-1));
+  const[numKey,setNumKey]=useState(0);
   useEffect(()=>{
-    const t=setTimeout(()=>{setPhase("out");setTimeout(onDone,250);},1400);
-    return()=>clearTimeout(t);
+    const t1=setTimeout(()=>{setDisplayNum(newStreak);setNumKey(k=>k+1);},550);
+    const t2=setTimeout(()=>{setPhase("out");setTimeout(onDone,250);},1900);
+    return()=>{clearTimeout(t1);clearTimeout(t2);};
   },[]);
   return(
     <div className={`streak-overlay${phase==="out"?" out":""}`} onClick={()=>{setPhase("out");setTimeout(onDone,250);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:600,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-      <div style={{display:"flex",alignItems:"center",gap:10}}>
-        <FlameSVG size={40} color={fc} innerColor="rgba(255,255,180,0.85)"/>
-        <span style={{fontSize:44,fontWeight:800,color:"#fff",lineHeight:1,letterSpacing:"-1.5px"}}>{newStreak}</span>
+      <div className="flame-grow" style={{display:"flex",alignItems:"center",gap:10}}>
+        <FlameSVG size={44} color={fc} innerColor="rgba(255,255,180,0.85)"/>
+        <span key={numKey} className="num-pop" style={{fontSize:48,fontWeight:800,color:"#fff",lineHeight:1,letterSpacing:"-1.5px"}}>{displayNum}</span>
       </div>
       <div style={{marginTop:10,fontSize:14,fontWeight:500,color:"rgba(255,255,255,0.75)"}}>{newStreak===1?"Premier jour":`jour${newStreak>1?"s":""} de suite`}</div>
     </div>
@@ -822,40 +805,6 @@ function SortedHabitList({habits,localProg,logs,onPct,onCommit,onEdit,T,onOversh
   );
 }
 
-// ── SUCCÈS (intégrés dans Paramètres) ──
-function AchievementsPanel({masterStreak,perfectDays,habitCount,overshots,T}){
-  const cats=[
-    {key:"streak",label:"Streak"},
-    {key:"perfect",label:"Journées parfaites"},
-    {key:"habits",label:"Habitudes"},
-    {key:"over",label:"Dépassements"},
-  ];
-  return(
-    <div>
-      {cats.map(({key,label})=>(
-        <div key={key} style={{marginBottom:16}}>
-          <div style={{fontSize:10,fontWeight:600,color:T.sub,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>{label}</div>
-          <div style={{display:"flex",flexDirection:"column",gap:6}}>
-            {ACHIEVEMENTS.filter(a=>a.cat===key).map(a=>{
-              const unlocked=a.check(masterStreak,perfectDays,habitCount,overshots);
-              return(
-                <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 11px",borderRadius:11,background:unlocked?T.accentLight:T.card,border:`1px solid ${unlocked?T.accent+"44":T.border}`,opacity:unlocked?1:0.4}}>
-                  <span style={{fontSize:18}}>{unlocked?a.icon:"🔒"}</span>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:600,fontSize:13,color:unlocked?T.accent:T.text}}>{a.label}</div>
-                    <div style={{fontSize:11,color:T.sub,marginTop:1}}>{a.desc}</div>
-                  </div>
-                  {unlocked&&<span style={{fontSize:10,color:T.accent,fontWeight:600}}>✓</span>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // ── MAIN ──
 function App(){
   const[habits,setHabits]=useState([]);
@@ -1081,7 +1030,7 @@ function App(){
           <button onClick={()=>setShowSettings(false)} style={{background:T.accentLight,border:"none",borderRadius:20,width:30,height:30,cursor:"pointer",color:T.sub,fontSize:14}}>✕</button>
         </div>
         <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
-          {[{k:"stats",l:"Stats"},{k:"succes",l:"Succès"},{k:"sauvegarde",l:"Sauvegarde"},{k:"theme",l:"Thème"},{k:"zen",l:"Zen"}].map(({k,l})=>(
+          {[{k:"stats",l:"Stats"},{k:"sauvegarde",l:"Sauvegarde"},{k:"theme",l:"Thème"},{k:"zen",l:"Zen"}].map(({k,l})=>(
             <button key={k} onClick={()=>setSettingsTab(k)} style={{flex:"1 1 auto",padding:"7px 8px",borderRadius:9,border:`1.5px solid ${settingsTab===k?T.accent:T.border}`,background:settingsTab===k?T.accentLight:"transparent",color:settingsTab===k?T.accent:T.sub,cursor:"pointer",fontSize:11,fontWeight:settingsTab===k?600:400}}>{l}</button>
           ))}
         </div>
@@ -1089,21 +1038,19 @@ function App(){
           <div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:12}}>
               {[
-                {label:"Série actuelle",value:`${masterStreak} jour${masterStreak!==1?"s":""}`},
-                {label:"Meilleure série",value:`${bestStreak} jour${bestStreak!==1?"s":""}`},
-                {label:"Journées parfaites",value:`${perfectDays} total`},
-                {label:"Dépassements",value:`${overshots} fois`},
-              ].map(({label,value})=>(
+                {icon:"🔥",label:"Série actuelle",value:`${masterStreak} jour${masterStreak!==1?"s":""}`},
+                {icon:"🏆",label:"Meilleure série",value:`${bestStreak} jour${bestStreak!==1?"s":""}`},
+                {icon:"⭐",label:"Journées parfaites",value:`${perfectDays} total`},
+                {icon:"💪",label:"Dépassements",value:`${overshots} fois`},
+              ].map(({icon,label,value})=>(
                 <div key={label} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:11,padding:"12px 10px",textAlign:"center"}}>
+                  <div style={{fontSize:18,marginBottom:4}}>{icon}</div>
                   <div style={{fontWeight:700,fontSize:15,color:T.text}}>{value}</div>
                   <div style={{fontSize:9,color:T.sub,marginTop:3}}>{label}</div>
                 </div>
               ))}
             </div>
           </div>
-        )}
-        {settingsTab==="succes"&&(
-          <AchievementsPanel masterStreak={masterStreak} perfectDays={perfectDays} habitCount={habits.length} overshots={overshots} T={T}/>
         )}
         {settingsTab==="sauvegarde"&&(
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
